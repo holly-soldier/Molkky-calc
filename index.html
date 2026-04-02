@@ -4,24 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>モルック リアルタイムスコア</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <style>
     body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f9; }
-    h1 { color: #333; }
+    h1 { color: #333; margin-bottom: 10px; }
     #setup-screen, #game-screen { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
-    input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+    input, select, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
     button { background-color: #28a745; color: white; border: none; cursor: pointer; }
     button:active { background-color: #218838; }
-    .score-board { margin-top: 20px; text-align: left; }
+    .score-board { margin-top: 15px; text-align: left; }
     .player-card { padding: 15px; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
     .player-info { font-size: 18px; font-weight: bold; }
     .miss-marks { color: red; font-size: 14px; }
-    .input-area { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 20px; }
+    .input-area { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 10px; }
     .btn-score { background-color: #007bff; }
     .btn-miss { background-color: #dc3545; }
     .btn-undo { background-color: #ffc107; color: #333; font-weight: bold; width: 100%; margin-top: 15px; }
-    .btn-delete { background-color: #6c757d; color: white; width: 100%; margin-top: 30px; font-size: 14px; }
+    .btn-share { background-color: #17a2b8; padding: 5px 10px; font-size: 14px; }
+    .btn-delete { background-color: #6c757d; color: white; width: 100%; margin-top: 20px; font-size: 14px; }
     .winner { background-color: #fff3cd; border-color: #ffeeba; }
     .disqualified { background-color: #e9ecef; color: #6c757d; text-decoration: line-through; }
+    .control-box { background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left; }
+    .control-box select { width: 100%; margin: 5px 0 0 0; font-weight: bold; }
+    hr { border: 0; height: 1px; background: #ddd; margin: 20px 0; }
   </style>
 </head>
 <body>
@@ -32,18 +37,31 @@
     <p>合言葉（ルームID）を決めて共有してください。</p>
     <input type="text" id="room-id" placeholder="例: molkky2026" required>
     <br>
-    <input type="text" id="player-name" placeholder="あなたの名前（またはチーム名）" required>
+    <input type="text" id="player-name" placeholder="最初のプレイヤー名" required>
     <br>
-    <button id="btn-join">ルームに参加する</button>
+    <button id="btn-join" style="width: 100%; margin-top: 10px;">ルームを作成 / 参加</button>
   </div>
 
   <div id="game-screen" style="display: none;">
-    <h2 id="display-room-id"></h2>
+    <h2 style="margin-top: 0; font-size: 20px;">
+      ルーム: <span id="display-room-id"></span>
+      <button class="btn-share" onclick="toggleQRCode()">📱 QRで共有</button>
+    </h2>
+    
+    <div id="qr-container" style="display: none; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 15px;">
+      <p style="margin: 0 0 10px 0; font-size: 14px; color: #555;">このQRをスキャンして入室！</p>
+      <canvas id="qr-code"></canvas>
+    </div>
+
     <div id="score-list" class="score-board">
       </div>
 
     <div id="controls-area">
-      <h3>点数を入力</h3>
+      <div class="control-box">
+        <label for="target-player" style="font-size: 14px; color: #555;">👇 誰の点数を入力しますか？</label>
+        <select id="target-player"></select>
+      </div>
+
       <div class="input-area">
         <script>
           for (let i = 1; i <= 12; i++) {
@@ -53,7 +71,15 @@
         <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
       </div>
       
-      <button class="btn-undo" onclick="undoScore()">↩ 入力を1つ取り消す</button>
+      <button class="btn-undo" onclick="undoScore()">↩ 選択中の人の入力を1つ取り消す</button>
+
+      <hr>
+
+      <div style="display: flex; gap: 5px;">
+        <input type="text" id="new-player-name" placeholder="新しいプレイヤー名" style="flex: 1; margin: 0;">
+        <button onclick="addNewPlayer()" style="margin: 0; white-space: nowrap;">追加</button>
+      </div>
+
       <button class="btn-delete" onclick="deleteRoom()">🗑️ ルームを解散する（全データ削除）</button>
     </div>
   </div>
@@ -77,23 +103,30 @@
     const db = getDatabase(app);
 
     let currentRoomId = "";
-    let currentPlayerName = "";
+    let initialPlayerName = "";
+
+    // ★ URLに「?room=合言葉」が含まれている場合、入力欄に自動セットする
+    window.onload = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.has('room')) {
+        document.getElementById('room-id').value = urlParams.get('room');
+      }
+    };
 
     document.getElementById('btn-join').addEventListener('click', () => {
       currentRoomId = document.getElementById('room-id').value.trim();
-      currentPlayerName = document.getElementById('player-name').value.trim();
+      initialPlayerName = document.getElementById('player-name').value.trim();
 
-      if (!currentRoomId || !currentPlayerName) {
+      if (!currentRoomId || !initialPlayerName) {
         alert("ルームIDと名前を入力してください");
         return;
       }
 
-      // 認証なしでそのまま進む
       document.getElementById('setup-screen').style.display = 'none';
       document.getElementById('game-screen').style.display = 'block';
-      document.getElementById('display-room-id').innerText = `ルーム: ${currentRoomId}`;
+      document.getElementById('display-room-id').innerText = currentRoomId;
 
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${initialPlayerName}`);
       get(playerRef).then((snapshot) => {
         if (!snapshot.exists()) {
           set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] });
@@ -105,14 +138,40 @@
         const players = snapshot.val();
         
         if (players === null) {
+          // データが空の場合
           document.getElementById('score-list').innerHTML = "<p style='color:red; font-weight:bold;'>ルームが解散されました。</p>";
           document.getElementById('controls-area').style.display = 'none';
           return;
         }
 
+        // ★ バグ修正：データが存在する場合は操作エリアを必ず表示する
+        document.getElementById('controls-area').style.display = 'block';
+        
         updateScoreBoard(players);
+        updatePlayerSelect(players); // セレクトボックスの更新
       });
     });
+
+    // 🎯 セレクトボックス（操作対象）の更新関数
+    function updatePlayerSelect(players) {
+      const select = document.getElementById('target-player');
+      const currentSelected = select.value; // 現在選択されている人を記憶
+
+      select.innerHTML = ''; // 一旦クリア
+      for (const name of Object.keys(players)) {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      }
+
+      // 画面更新前と同じ人が選択されるようにする（いなければ最初のプレイヤー）
+      if (currentSelected && players[currentSelected]) {
+        select.value = currentSelected;
+      } else if (players[initialPlayerName]) {
+        select.value = initialPlayerName;
+      }
+    }
 
     function updateScoreBoard(players) {
       const scoreList = document.getElementById('score-list');
@@ -143,8 +202,12 @@
       }
     }
 
+    // ★ 変更：選択されているプレイヤーに対して点数を処理する
     window.addScore = async function(points) {
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      const targetName = document.getElementById('target-player').value;
+      if (!targetName) return;
+
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetName}`);
       get(playerRef).then((snapshot) => {
         if (snapshot.exists()) {
           let data = snapshot.val();
@@ -174,7 +237,10 @@
     };
 
     window.undoScore = async function() {
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      const targetName = document.getElementById('target-player').value;
+      if (!targetName) return;
+
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetName}`);
       get(playerRef).then((snapshot) => {
         if (snapshot.exists()) {
           let data = snapshot.val();
@@ -191,12 +257,59 @@
       });
     };
 
+    // ➕ 新機能：ゲーム画面からプレイヤーを追加する
+    window.addNewPlayer = async function() {
+      const newNameInput = document.getElementById('new-player-name');
+      const newName = newNameInput.value.trim();
+      
+      if (!newName) {
+        alert("名前を入力してください");
+        return;
+      }
+
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${newName}`);
+      get(playerRef).then((snapshot) => {
+        if (!snapshot.exists()) {
+          set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] }).then(() => {
+            newNameInput.value = ''; // 入力欄をクリア
+            // 追加した人を自動でセレクトボックスで選択状態にする
+            setTimeout(() => { document.getElementById('target-player').value = newName; }, 300);
+          });
+        } else {
+          alert("すでに同じ名前のプレイヤーがいます！");
+        }
+      });
+    };
+
+    // 📱 新機能：QRコードの表示/非表示と生成
+    window.toggleQRCode = function() {
+      const container = document.getElementById('qr-container');
+      
+      if (container.style.display === 'none') {
+        container.style.display = 'block';
+        // 現在のURL（?以降のパラメータを除いた基本URL）にルームIDを付与
+        const baseUrl = window.location.href.split('?')[0];
+        const shareUrl = `${baseUrl}?room=${encodeURIComponent(currentRoomId)}`;
+        
+        // QRコードの生成
+        new QRious({
+          element: document.getElementById('qr-code'),
+          value: shareUrl,
+          size: 150,
+          background: 'white',
+          foreground: 'black'
+        });
+      } else {
+        container.style.display = 'none';
+      }
+    };
+
     window.deleteRoom = async function() {
       if (confirm("本当にルームを解散しますか？\n全員のデータが完全に削除されます。")) {
         const currentRoomRef = ref(db, `rooms/${currentRoomId}`);
         remove(currentRoomRef).then(() => {
-          alert("ルームを削除しました。最初の画面に戻ります。");
-          location.reload(); 
+          // URLのパラメータ（?room=...）を消してリロードする
+          window.location.href = window.location.href.split('?')[0];
         });
       }
     };
