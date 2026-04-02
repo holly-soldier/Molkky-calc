@@ -9,23 +9,51 @@
     body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f9; }
     h1 { color: #333; margin-bottom: 10px; }
     #setup-screen, #game-screen { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
-    input, select, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+    input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
     button { background-color: #28a745; color: white; border: none; cursor: pointer; }
     button:active { background-color: #218838; }
     .score-board { margin-top: 15px; text-align: left; }
-    .player-card { padding: 15px; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
-    .player-info { font-size: 18px; font-weight: bold; }
-    .miss-marks { color: red; font-size: 14px; }
+    
+    /* カードのデザインとアニメーション */
+    .player-card { 
+      padding: 15px; 
+      margin-bottom: 10px; 
+      border-radius: 8px; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      cursor: pointer; /* タップできることを示す指マーク */
+      transition: all 0.2s ease-in-out; /* ふんわり変化させる */
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    /* 選択されていない状態 */
+    .player-card:not(.selected-card) {
+      border: 1px solid #ddd;
+      background-color: #fff;
+    }
+    /* ★ 選択されている状態（青枠で強調） */
+    .player-card.selected-card {
+      border: 3px solid #007bff;
+      background-color: #f0f8ff;
+      transform: scale(1.02); /* 少しだけ大きくする */
+      box-shadow: 0 4px 8px rgba(0,123,255,0.2);
+    }
+
+    .player-info { font-size: 18px; font-weight: bold; pointer-events: none; }
+    .miss-marks { color: red; font-size: 14px; pointer-events: none; }
+    .score-display { font-size: 24px; font-weight: bold; pointer-events: none; }
+
     .input-area { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 10px; }
     .btn-score { background-color: #007bff; }
     .btn-miss { background-color: #dc3545; }
     .btn-undo { background-color: #ffc107; color: #333; font-weight: bold; width: 100%; margin-top: 15px; }
     .btn-share { background-color: #17a2b8; padding: 5px 10px; font-size: 14px; }
     .btn-delete { background-color: #6c757d; color: white; width: 100%; margin-top: 20px; font-size: 14px; }
-    .winner { background-color: #fff3cd; border-color: #ffeeba; }
-    .disqualified { background-color: #e9ecef; color: #6c757d; text-decoration: line-through; }
+    
+    .winner { background-color: #fff3cd !important; border-color: #ffeeba !important; }
+    .disqualified { background-color: #e9ecef !important; color: #6c757d; text-decoration: line-through; border-color: #ccc !important; }
+    
     .control-box { background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left; }
-    .control-box select { width: 100%; margin: 5px 0 0 0; font-weight: bold; }
     hr { border: 0; height: 1px; background: #ddd; margin: 20px 0; }
   </style>
 </head>
@@ -53,25 +81,23 @@
       <canvas id="qr-code"></canvas>
     </div>
 
-    <div id="score-list" class="score-board">
-      </div>
+    <p style="font-size: 14px; color: #007bff; font-weight: bold; margin-bottom: 5px;">👇 点数を入力する人をタップ！</p>
+
+    <div id="score-list" class="score-board"></div>
 
     <div id="controls-area">
       <div class="control-box">
-        <label for="target-player" style="font-size: 14px; color: #555;">👇 誰の点数を入力しますか？</label>
-        <select id="target-player"></select>
+        <div class="input-area">
+          <script>
+            for (let i = 1; i <= 12; i++) {
+              document.write(`<button class="btn-score" onclick="addScore(${i})">${i}点</button>`);
+            }
+          </script>
+          <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
+        </div>
+        
+        <button class="btn-undo" onclick="undoScore()">↩ 選択中の人の入力を1つ取り消す</button>
       </div>
-
-      <div class="input-area">
-        <script>
-          for (let i = 1; i <= 12; i++) {
-            document.write(`<button class="btn-score" onclick="addScore(${i})">${i}点</button>`);
-          }
-        </script>
-        <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
-      </div>
-      
-      <button class="btn-undo" onclick="undoScore()">↩ 選択中の人の入力を1つ取り消す</button>
 
       <hr>
 
@@ -104,8 +130,11 @@
 
     let currentRoomId = "";
     let initialPlayerName = "";
+    
+    // ★ 追加：現在選択されているプレイヤーと、最新のデータを記憶する変数
+    let targetPlayerName = ""; 
+    let currentPlayersData = null;
 
-    // ★ URLに「?room=合言葉」が含まれている場合、入力欄に自動セットする
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('room')) {
@@ -138,49 +167,43 @@
         const players = snapshot.val();
         
         if (players === null) {
-          // データが空の場合
           document.getElementById('score-list').innerHTML = "<p style='color:red; font-weight:bold;'>ルームが解散されました。</p>";
           document.getElementById('controls-area').style.display = 'none';
           return;
         }
 
-        // ★ バグ修正：データが存在する場合は操作エリアを必ず表示する
         document.getElementById('controls-area').style.display = 'block';
-        
         updateScoreBoard(players);
-        updatePlayerSelect(players); // セレクトボックスの更新
       });
     });
 
-    // 🎯 セレクトボックス（操作対象）の更新関数
-    function updatePlayerSelect(players) {
-      const select = document.getElementById('target-player');
-      const currentSelected = select.value; // 現在選択されている人を記憶
-
-      select.innerHTML = ''; // 一旦クリア
-      for (const name of Object.keys(players)) {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        select.appendChild(option);
+    // ★ 新機能：カードをタップした時に呼ばれる関数
+    window.selectPlayer = function(name) {
+      targetPlayerName = name; // 選択された人の名前をセット
+      if (currentPlayersData) {
+        updateScoreBoard(currentPlayersData); // 画面を再描画して青枠をつける
       }
-
-      // 画面更新前と同じ人が選択されるようにする（いなければ最初のプレイヤー）
-      if (currentSelected && players[currentSelected]) {
-        select.value = currentSelected;
-      } else if (players[initialPlayerName]) {
-        select.value = initialPlayerName;
-      }
-    }
+    };
 
     function updateScoreBoard(players) {
+      currentPlayersData = players; // 最新のデータを記憶
       const scoreList = document.getElementById('score-list');
       scoreList.innerHTML = '';
       if (!players) return;
 
+      // 誰も選択されていない場合は、最初のプレイヤーを自動選択する
+      if (!targetPlayerName || !players[targetPlayerName]) {
+        targetPlayerName = players[initialPlayerName] ? initialPlayerName : Object.keys(players)[0];
+      }
+
       for (const [name, data] of Object.entries(players)) {
         let cardClass = "player-card";
         let statusText = "";
+
+        // ★ 選択中の人のカードには特別なクラス（青枠）を追加
+        if (name === targetPlayerName) {
+          cardClass += " selected-card";
+        }
 
         if (data.status === 'winner') {
           cardClass += " winner";
@@ -191,23 +214,23 @@
         }
         const missMarks = "❌".repeat(data.miss || 0);
 
+        // ★ onclick="selectPlayer('${name}')" を追加し、カード全体をタップ可能に
         scoreList.innerHTML += `
-          <div class="${cardClass}">
+          <div class="${cardClass}" onclick="selectPlayer('${name}')">
             <div class="player-info">${name} ${statusText}
               <br><span class="miss-marks">${missMarks}</span>
             </div>
-            <div style="font-size: 24px; font-weight: bold;">${data.score} 点</div>
+            <div class="score-display">${data.score} 点</div>
           </div>
         `;
       }
     }
 
-    // ★ 変更：選択されているプレイヤーに対して点数を処理する
+    // ★ 入力先をセレクトボックスから、タップで選んだ人に変更
     window.addScore = async function(points) {
-      const targetName = document.getElementById('target-player').value;
-      if (!targetName) return;
+      if (!targetPlayerName) return;
 
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetName}`);
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetPlayerName}`);
       get(playerRef).then((snapshot) => {
         if (snapshot.exists()) {
           let data = snapshot.val();
@@ -237,10 +260,9 @@
     };
 
     window.undoScore = async function() {
-      const targetName = document.getElementById('target-player').value;
-      if (!targetName) return;
+      if (!targetPlayerName) return;
 
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetName}`);
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetPlayerName}`);
       get(playerRef).then((snapshot) => {
         if (snapshot.exists()) {
           let data = snapshot.val();
@@ -257,7 +279,6 @@
       });
     };
 
-    // ➕ 新機能：ゲーム画面からプレイヤーを追加する
     window.addNewPlayer = async function() {
       const newNameInput = document.getElementById('new-player-name');
       const newName = newNameInput.value.trim();
@@ -271,9 +292,9 @@
       get(playerRef).then((snapshot) => {
         if (!snapshot.exists()) {
           set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] }).then(() => {
-            newNameInput.value = ''; // 入力欄をクリア
-            // 追加した人を自動でセレクトボックスで選択状態にする
-            setTimeout(() => { document.getElementById('target-player').value = newName; }, 300);
+            newNameInput.value = '';
+            // ★ 新しく追加した人を自動で「選択状態」にする
+            targetPlayerName = newName; 
           });
         } else {
           alert("すでに同じ名前のプレイヤーがいます！");
@@ -281,24 +302,13 @@
       });
     };
 
-    // 📱 新機能：QRコードの表示/非表示と生成
     window.toggleQRCode = function() {
       const container = document.getElementById('qr-container');
-      
       if (container.style.display === 'none') {
         container.style.display = 'block';
-        // 現在のURL（?以降のパラメータを除いた基本URL）にルームIDを付与
         const baseUrl = window.location.href.split('?')[0];
         const shareUrl = `${baseUrl}?room=${encodeURIComponent(currentRoomId)}`;
-        
-        // QRコードの生成
-        new QRious({
-          element: document.getElementById('qr-code'),
-          value: shareUrl,
-          size: 150,
-          background: 'white',
-          foreground: 'black'
-        });
+        new QRious({ element: document.getElementById('qr-code'), value: shareUrl, size: 150, background: 'white', foreground: 'black' });
       } else {
         container.style.display = 'none';
       }
@@ -308,7 +318,6 @@
       if (confirm("本当にルームを解散しますか？\n全員のデータが完全に削除されます。")) {
         const currentRoomRef = ref(db, `rooms/${currentRoomId}`);
         remove(currentRoomRef).then(() => {
-          // URLのパラメータ（?room=...）を消してリロードする
           window.location.href = window.location.href.split('?')[0];
         });
       }
