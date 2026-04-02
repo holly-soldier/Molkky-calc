@@ -8,7 +8,7 @@
     body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f9; }
     h1 { color: #333; }
     #setup-screen, #game-screen { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
-    input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; }
+    input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
     button { background-color: #28a745; color: white; border: none; cursor: pointer; }
     button:active { background-color: #218838; }
     .score-board { margin-top: 20px; text-align: left; }
@@ -18,6 +18,8 @@
     .input-area { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 20px; }
     .btn-score { background-color: #007bff; }
     .btn-miss { background-color: #dc3545; }
+    .btn-undo { background-color: #ffc107; color: #333; font-weight: bold; width: 100%; margin-top: 15px; }
+    .btn-delete { background-color: #6c757d; color: white; width: 100%; margin-top: 30px; font-size: 14px; }
     .winner { background-color: #fff3cd; border-color: #ffeeba; }
     .disqualified { background-color: #e9ecef; color: #6c757d; text-decoration: line-through; }
   </style>
@@ -40,43 +42,48 @@
     <div id="score-list" class="score-board">
       </div>
 
-    <h3>点数を入力</h3>
-    <p>※自分のターンが終わったら入力してください</p>
-    <div class="input-area">
-      <script>
-        for (let i = 1; i <= 12; i++) {
-          document.write(`<button class="btn-score" onclick="addScore(${i})">${i}点</button>`);
-        }
-      </script>
-      <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
+    <div id="controls-area">
+      <h3>点数を入力</h3>
+      <div class="input-area">
+        <script>
+          for (let i = 1; i <= 12; i++) {
+            document.write(`<button class="btn-score" onclick="addScore(${i})">${i}点</button>`);
+          }
+        </script>
+        <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
+      </div>
+      
+      <button class="btn-undo" onclick="undoScore()">↩ 入力を1つ取り消す</button>
+      
+      <button class="btn-delete" onclick="deleteRoom()">🗑️ ルームを解散する（全データ削除）</button>
     </div>
   </div>
 
   <script type="module">
-    // Firebase SDKの読み込み (CDN)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
+    // ★ remove（削除用）を追加
+    import { getDatabase, ref, set, onValue, get, remove } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
+    // ★ Auth（認証用）を追加
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
 
-    // ⚠️【重要】ここにあなたのFirebaseプロジェクトの設定を貼り付けます⚠️
     const firebaseConfig = {
-    apiKey: "AIzaSyBx5CrIMOcya732cYe2YYpB01MHAUa0zqw",
-    authDomain: "molkky-calc.firebaseapp.com",
-    databaseURL: "https://molkky-calc-default-rtdb.firebaseio.com",
-    projectId: "molkky-calc",
-    storageBucket: "molkky-calc.firebasestorage.app",
-    messagingSenderId: "621719615552",
-    appId: "1:621719615552:web:823e8b2c44a05b6741c7a5",
-    measurementId: "G-BV6D5T8FMB"
+      apiKey: "AIzaSyBx5CrIMOcya732cYe2YYpB01MHAUa0zqw",
+      authDomain: "molkky-calc.firebaseapp.com",
+      databaseURL: "https://molkky-calc-default-rtdb.firebaseio.com",
+      projectId: "molkky-calc",
+      storageBucket: "molkky-calc.firebasestorage.app",
+      messagingSenderId: "621719615552",
+      appId: "1:621719615552:web:823e8b2c44a05b6741c7a5",
+      measurementId: "G-BV6D5T8FMB"
     };
 
-    // Firebaseの初期化
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    const auth = getAuth(app); // ★ 認証の初期化
 
     let currentRoomId = "";
     let currentPlayerName = "";
 
-    // 「ルームに参加する」ボタンの処理
     document.getElementById('btn-join').addEventListener('click', () => {
       currentRoomId = document.getElementById('room-id').value.trim();
       currentPlayerName = document.getElementById('player-name').value.trim();
@@ -86,31 +93,40 @@
         return;
       }
 
-      document.getElementById('setup-screen').style.display = 'none';
-      document.getElementById('game-screen').style.display = 'block';
-      document.getElementById('display-room-id').innerText = `ルーム: ${currentRoomId}`;
+      // ★ 匿名ログインを実行してからデータベースにアクセスする
+      signInAnonymously(auth).then(() => {
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('game-screen').style.display = 'block';
+        document.getElementById('display-room-id').innerText = `ルーム: ${currentRoomId}`;
 
-      // 初期データをFirebaseにセット (スコア0, ミス0)
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
-      get(playerRef).then((snapshot) => {
-        if (!snapshot.exists()) {
-          set(playerRef, { score: 0, miss: 0, status: 'playing' });
-        }
-      });
+        const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+        get(playerRef).then((snapshot) => {
+          if (!snapshot.exists()) {
+            set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] });
+          }
+        });
 
-      // リアルタイム同期の開始（データが変化するたびに画面を更新）
-      const roomRef = ref(db, `rooms/${currentRoomId}/players`);
-      onValue(roomRef, (snapshot) => {
-        const players = snapshot.val();
-        updateScoreBoard(players);
+        const roomRef = ref(db, `rooms/${currentRoomId}/players`);
+        onValue(roomRef, (snapshot) => {
+          const players = snapshot.val();
+          
+          // ★ もし誰かがルームを削除してデータが空(null)になった場合の処理
+          if (players === null) {
+            document.getElementById('score-list').innerHTML = "<p style='color:red; font-weight:bold;'>ルームが解散されました。</p>";
+            document.getElementById('controls-area').style.display = 'none';
+            return;
+          }
+
+          updateScoreBoard(players);
+        });
+      }).catch((error) => {
+        alert("ログインに失敗しました。Firebaseの設定を確認してください。エラー: " + error.message);
       });
     });
 
-    // スコアボードの描画関数
     function updateScoreBoard(players) {
       const scoreList = document.getElementById('score-list');
-      scoreList.innerHTML = ''; // 一旦クリア
-
+      scoreList.innerHTML = '';
       if (!players) return;
 
       for (const [name, data] of Object.entries(players)) {
@@ -124,8 +140,7 @@
           cardClass += " disqualified";
           statusText = " 💀 失格";
         }
-
-        const missMarks = "❌".repeat(data.miss);
+        const missMarks = "❌".repeat(data.miss || 0);
 
         scoreList.innerHTML += `
           <div class="${cardClass}">
@@ -138,40 +153,63 @@
       }
     }
 
-    // 点数を加算する関数（HTML側のonclickから呼ばれる）
     window.addScore = async function(points) {
       const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
-      
       get(playerRef).then((snapshot) => {
         if (snapshot.exists()) {
           let data = snapshot.val();
-
-          // すでに失格か上がりの場合は処理しない
           if (data.status !== 'playing') return;
 
+          if (!data.history) data.history = [];
+          data.history.push({ score: data.score, miss: data.miss, status: data.status });
+
           if (points === 0) {
-            // ミスの場合
             data.miss += 1;
             if (data.miss >= 3) {
               data.score = 0;
-              data.status = 'disqualified'; // 3回連続ミスで失格
+              data.status = 'disqualified';
             }
           } else {
-            // 得点した場合
-            data.miss = 0; // ミスをリセット
+            data.miss = 0;
             data.score += points;
-
             if (data.score === 50) {
-              data.status = 'winner'; // ピタリ50点で上がり
+              data.status = 'winner';
             } else if (data.score > 50) {
-              data.score = 25; // 50点を超えたら25点に戻る
+              data.score = 25;
             }
           }
-
-          // Firebaseに計算後のデータを保存（自動的に全員の画面が更新される）
           set(playerRef, data);
         }
       });
+    };
+
+    window.undoScore = async function() {
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      get(playerRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          let data = snapshot.val();
+          if (data.history && data.history.length > 0) {
+            const prevState = data.history.pop();
+            data.score = prevState.score;
+            data.miss = prevState.miss;
+            data.status = prevState.status;
+            set(playerRef, data);
+          } else {
+            alert("これ以上、前の状態に戻すことはできません。");
+          }
+        }
+      });
+    };
+
+    // ★ 新機能：ルームを削除する関数
+    window.deleteRoom = async function() {
+      if (confirm("本当にルームを解散しますか？\n全員のデータが完全に削除されます。")) {
+        const currentRoomRef = ref(db, `rooms/${currentRoomId}`);
+        remove(currentRoomRef).then(() => {
+          alert("ルームを削除しました。最初の画面に戻ります。");
+          location.reload(); // ページをリロードして初期画面に戻す
+        });
+      }
     };
   </script>
 </body>
