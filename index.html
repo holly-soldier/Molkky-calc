@@ -54,17 +54,13 @@
       </div>
       
       <button class="btn-undo" onclick="undoScore()">↩ 入力を1つ取り消す</button>
-      
       <button class="btn-delete" onclick="deleteRoom()">🗑️ ルームを解散する（全データ削除）</button>
     </div>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
-    // ★ remove（削除用）を追加
     import { getDatabase, ref, set, onValue, get, remove } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
-    // ★ Auth（認証用）を追加
-    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBx5CrIMOcya732cYe2YYpB01MHAUa0zqw",
@@ -79,7 +75,6 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    const auth = getAuth(app); // ★ 認証の初期化
 
     let currentRoomId = "";
     let currentPlayerName = "";
@@ -93,34 +88,29 @@
         return;
       }
 
-      // ★ 匿名ログインを実行してからデータベースにアクセスする
-      signInAnonymously(auth).then(() => {
-        document.getElementById('setup-screen').style.display = 'none';
-        document.getElementById('game-screen').style.display = 'block';
-        document.getElementById('display-room-id').innerText = `ルーム: ${currentRoomId}`;
+      // 認証なしでそのまま進む
+      document.getElementById('setup-screen').style.display = 'none';
+      document.getElementById('game-screen').style.display = 'block';
+      document.getElementById('display-room-id').innerText = `ルーム: ${currentRoomId}`;
 
-        const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
-        get(playerRef).then((snapshot) => {
-          if (!snapshot.exists()) {
-            set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] });
-          }
-        });
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      get(playerRef).then((snapshot) => {
+        if (!snapshot.exists()) {
+          set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] });
+        }
+      });
 
-        const roomRef = ref(db, `rooms/${currentRoomId}/players`);
-        onValue(roomRef, (snapshot) => {
-          const players = snapshot.val();
-          
-          // ★ もし誰かがルームを削除してデータが空(null)になった場合の処理
-          if (players === null) {
-            document.getElementById('score-list').innerHTML = "<p style='color:red; font-weight:bold;'>ルームが解散されました。</p>";
-            document.getElementById('controls-area').style.display = 'none';
-            return;
-          }
+      const roomRef = ref(db, `rooms/${currentRoomId}/players`);
+      onValue(roomRef, (snapshot) => {
+        const players = snapshot.val();
+        
+        if (players === null) {
+          document.getElementById('score-list').innerHTML = "<p style='color:red; font-weight:bold;'>ルームが解散されました。</p>";
+          document.getElementById('controls-area').style.display = 'none';
+          return;
+        }
 
-          updateScoreBoard(players);
-        });
-      }).catch((error) => {
-        alert("ログインに失敗しました。Firebaseの設定を確認してください。エラー: " + error.message);
+        updateScoreBoard(players);
       });
     });
 
@@ -201,13 +191,12 @@
       });
     };
 
-    // ★ 新機能：ルームを削除する関数
     window.deleteRoom = async function() {
       if (confirm("本当にルームを解散しますか？\n全員のデータが完全に削除されます。")) {
         const currentRoomRef = ref(db, `rooms/${currentRoomId}`);
         remove(currentRoomRef).then(() => {
           alert("ルームを削除しました。最初の画面に戻ります。");
-          location.reload(); // ページをリロードして初期画面に戻す
+          location.reload(); 
         });
       }
     };
