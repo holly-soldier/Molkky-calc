@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>モルック リアルタイムスコア</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f9; }
+    h1 { color: #333; }
+    #setup-screen, #game-screen { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
+    input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; }
+    button { background-color: #28a745; color: white; border: none; cursor: pointer; }
+    button:active { background-color: #218838; }
+    .score-board { margin-top: 20px; text-align: left; }
+    .player-card { padding: 15px; border: 1px solid #ddd; margin-bottom: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .player-info { font-size: 18px; font-weight: bold; }
+    .miss-marks { color: red; font-size: 14px; }
+    .input-area { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 20px; }
+    .btn-score { background-color: #007bff; }
+    .btn-miss { background-color: #dc3545; }
+    .winner { background-color: #fff3cd; border-color: #ffeeba; }
+    .disqualified { background-color: #e9ecef; color: #6c757d; text-decoration: line-through; }
+  </style>
+</head>
+<body>
+
+  <h1>モルック スコアボード</h1>
+
+  <div id="setup-screen">
+    <p>合言葉（ルームID）を決めて共有してください。</p>
+    <input type="text" id="room-id" placeholder="例: molkky2026" required>
+    <br>
+    <input type="text" id="player-name" placeholder="あなたの名前（またはチーム名）" required>
+    <br>
+    <button id="btn-join">ルームに参加する</button>
+  </div>
+
+  <div id="game-screen" style="display: none;">
+    <h2 id="display-room-id"></h2>
+    <div id="score-list" class="score-board">
+      </div>
+
+    <h3>点数を入力</h3>
+    <p>※自分のターンが終わったら入力してください</p>
+    <div class="input-area">
+      <script>
+        for (let i = 1; i <= 12; i++) {
+          document.write(`<button class="btn-score" onclick="addScore(${i})">${i}点</button>`);
+        }
+      </script>
+      <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
+    </div>
+  </div>
+
+  <script type="module">
+    // Firebase SDKの読み込み (CDN)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
+
+    // ⚠️【重要】ここにあなたのFirebaseプロジェクトの設定を貼り付けます⚠️
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Firebaseの初期化
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let currentRoomId = "";
+    let currentPlayerName = "";
+
+    // 「ルームに参加する」ボタンの処理
+    document.getElementById('btn-join').addEventListener('click', () => {
+      currentRoomId = document.getElementById('room-id').value.trim();
+      currentPlayerName = document.getElementById('player-name').value.trim();
+
+      if (!currentRoomId || !currentPlayerName) {
+        alert("ルームIDと名前を入力してください");
+        return;
+      }
+
+      document.getElementById('setup-screen').style.display = 'none';
+      document.getElementById('game-screen').style.display = 'block';
+      document.getElementById('display-room-id').innerText = `ルーム: ${currentRoomId}`;
+
+      // 初期データをFirebaseにセット (スコア0, ミス0)
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      get(playerRef).then((snapshot) => {
+        if (!snapshot.exists()) {
+          set(playerRef, { score: 0, miss: 0, status: 'playing' });
+        }
+      });
+
+      // リアルタイム同期の開始（データが変化するたびに画面を更新）
+      const roomRef = ref(db, `rooms/${currentRoomId}/players`);
+      onValue(roomRef, (snapshot) => {
+        const players = snapshot.val();
+        updateScoreBoard(players);
+      });
+    });
+
+    // スコアボードの描画関数
+    function updateScoreBoard(players) {
+      const scoreList = document.getElementById('score-list');
+      scoreList.innerHTML = ''; // 一旦クリア
+
+      if (!players) return;
+
+      for (const [name, data] of Object.entries(players)) {
+        let cardClass = "player-card";
+        let statusText = "";
+
+        if (data.status === 'winner') {
+          cardClass += " winner";
+          statusText = " 🎉 50点達成！";
+        } else if (data.status === 'disqualified') {
+          cardClass += " disqualified";
+          statusText = " 💀 失格";
+        }
+
+        const missMarks = "❌".repeat(data.miss);
+
+        scoreList.innerHTML += `
+          <div class="${cardClass}">
+            <div class="player-info">${name} ${statusText}
+              <br><span class="miss-marks">${missMarks}</span>
+            </div>
+            <div style="font-size: 24px; font-weight: bold;">${data.score} 点</div>
+          </div>
+        `;
+      }
+    }
+
+    // 点数を加算する関数（HTML側のonclickから呼ばれる）
+    window.addScore = async function(points) {
+      const playerRef = ref(db, `rooms/${currentRoomId}/players/${currentPlayerName}`);
+      
+      get(playerRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          let data = snapshot.val();
+
+          // すでに失格か上がりの場合は処理しない
+          if (data.status !== 'playing') return;
+
+          if (points === 0) {
+            // ミスの場合
+            data.miss += 1;
+            if (data.miss >= 3) {
+              data.score = 0;
+              data.status = 'disqualified'; // 3回連続ミスで失格
+            }
+          } else {
+            // 得点した場合
+            data.miss = 0; // ミスをリセット
+            data.score += points;
+
+            if (data.score === 50) {
+              data.status = 'winner'; // ピタリ50点で上がり
+            } else if (data.score > 50) {
+              data.score = 25; // 50点を超えたら25点に戻る
+            }
+          }
+
+          // Firebaseに計算後のデータを保存（自動的に全員の画面が更新される）
+          set(playerRef, data);
+        }
+      });
+    };
+  </script>
+</body>
+</html>
