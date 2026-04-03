@@ -51,11 +51,9 @@
     .table-container { overflow-x: auto; margin-top: 15px; }
     .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .scoresheet-table th, .scoresheet-table td { border: 1px solid #555; padding: 8px; text-align: center; vertical-align: middle; }
-    /* 白と薄灰の交互塗りつぶし */
     .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2; }
     .scoresheet-table tbody tr:nth-child(odd) { background-color: #ffffff; }
     
-    /* ★修正：枠だけ赤、文字は黒 */
     .red-circle { display: inline-flex; justify-content: center; align-items: center; width: 24px; height: 24px; border: 2px solid #e53935; border-radius: 50%; color: #000; font-weight: bold; }
 
     /* 印刷時の設定 */
@@ -65,7 +63,6 @@
       .no-print { display: none !important; }
       .scoresheet-table { width: 100%; font-size: 12pt; border: 2px solid #000; }
       .scoresheet-table th, .scoresheet-table td { border: 1px solid #000; padding: 6px; }
-      /* 印刷時も黒文字と赤枠を維持 */
       .red-circle { border-color: red !important; color: black !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
@@ -631,7 +628,6 @@
       }
     };
 
-    // ★修正：スコアシートを「縦型レイアウト（列=チーム、行=投擲）」に変更
     window.renderScoreSheet = function() {
       document.getElementById('sheet-title').innerText = `第 ${state.gameNumber || 1} ゲーム スコアシート`;
       document.getElementById('sheet-date').innerText = `日時: ${state.gameDate || ''}`;
@@ -646,7 +642,6 @@
         }
       });
 
-      // 1. ヘッダー行（項目とチーム名）
       let thead = `<thead><tr>
         <th style="min-width:60px; background-color:#e9ecef;">項目 \\ チーム</th>`;
       state.teamOrder.forEach(tId => {
@@ -657,7 +652,6 @@
 
       let tbody = `<tbody>`;
 
-      // 2. プレイヤー行
       tbody += `<tr><td style="font-weight:bold; background-color:#f9f9f9;">プレイヤー</td>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
@@ -666,7 +660,6 @@
       });
       tbody += `</tr>`;
 
-      // 3. 前G合計行
       tbody += `<tr><td style="font-weight:bold; background-color:#f9f9f9;">前G合計</td>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
@@ -674,7 +667,6 @@
       });
       tbody += `</tr>`;
 
-      // 4. 各投擲行（縦に伸びていく）
       for(let i = 0; i < maxThrows; i++) {
         tbody += `<tr><td style="font-weight:bold; background-color:#f9f9f9;">${i + 1} 投目</td>`;
         state.teamOrder.forEach(tId => {
@@ -685,7 +677,6 @@
             if (th.isMiss) {
               cellHtml = "X";
             } else if (th.isSingle) {
-              // 赤丸クラスを適用（CSSで文字黒・枠赤に設定済み）
               cellHtml = `<span class="red-circle">${th.points}</span>`;
             } else {
               cellHtml = th.points;
@@ -696,11 +687,11 @@
         tbody += `</tr>`;
       }
 
-      // 5. 終了時点数行
+      // ★修正：終了時点数のステータスアイコンを「👑」のみに変更
       tbody += `<tr style="border-top: 2px solid #333;"><td style="font-weight:bold; background-color:#e9ecef;">終了時点数</td>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
-        const statusIcon = team.status === 'winner' ? '<br>👑 上がり' : (team.status === 'disqualified' ? '<br>💀 失格' : '');
+        const statusIcon = team.status === 'winner' ? '<br>👑' : (team.status === 'disqualified' ? '<br>💀 失格' : '');
         tbody += `<td style="font-weight:bold; font-size:18px; background-color:#e9ecef;">${team.gameScore}${statusIcon}</td>`;
       });
       tbody += `</tr>`;
