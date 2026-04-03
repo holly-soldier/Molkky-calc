@@ -6,7 +6,7 @@
   <title>モルック スコアボード</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <style>
-    /* ベーススタイル（画面用） */
+    /* ベーススタイル */
     body { font-family: sans-serif; text-align: center; margin: 0; padding: 10px; background-color: #f4f4f9; color: #333; }
     .screen { display: none; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 450px; margin: 0 auto; box-sizing: border-box; }
     .active-screen { display: block; }
@@ -47,18 +47,16 @@
 
     hr { border: 0; height: 1px; background: #ccc; margin: 20px 0; }
 
-    /* スコアシート（テーブル）用のスタイル */
+    /* スコアシート（テーブル） */
     .table-container { overflow-x: auto; margin-top: 15px; }
     .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 600px; }
     .scoresheet-table th, .scoresheet-table td { border: 1px solid #555; padding: 8px; text-align: center; vertical-align: middle; }
     .scoresheet-table th { background-color: #e9ecef; }
-    /* 交互の背景色（白と薄灰色） */
     .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2; }
     .scoresheet-table tbody tr:nth-child(odd) { background-color: #ffffff; }
-    /* 赤丸スタイル */
     .red-circle { display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 22px; border: 2px solid #e53935; border-radius: 50%; color: #e53935; font-weight: bold; }
 
-    /* 印刷時の設定（画面のUIを隠してテーブルを全画面に） */
+    /* 印刷時の設定 */
     @media print {
       body { background-color: white; padding: 0; }
       .screen { box-shadow: none; max-width: 100%; padding: 0; margin: 0; }
@@ -164,12 +162,11 @@
 
     <hr>
     <button class="btn-info" style="width: 100%; margin-bottom: 10px;" onclick="showScoreSheet()">📋 スコアシートを表示 (印刷対応)</button>
-    
     <button class="btn-secondary" style="width: 100%; margin-bottom: 10px;" onclick="toggleQR()">📱 QRコードで共有</button>
     <div id="qr-container" style="display: none; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 10px;">
       <canvas id="qr-code"></canvas>
     </div>
-    <button class="btn-danger" style="width: 100%;" onclick="endGame()">ゲーム終了 (最初に戻る)</button>
+    <button class="btn-danger" style="width: 100%;" onclick="endGame()">ゲーム終了 (全員タイトルへ戻る)</button>
   </div>
 
   <div id="screen-scoresheet" class="screen" style="max-width: 800px;">
@@ -207,19 +204,23 @@
     let state = {
       roomId: "",
       teamCount: 0,
-      gameNumber: 1, // 新規：ゲーム数
-      gameDate: "",  // 新規：ゲーム開始日時
-      teams: [], // throwHistory: [] を新規追加
+      gameNumber: 1, 
+      gameDate: "",  
+      teams: [], 
       teamOrder: [],
       currentTurnIdx: 0,
       history: []
     };
+
+    // ★修正1: リスナーの重複起動と無限ループを防ぐフラグ
+    let isListening = false;
 
     function showScreen(id) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
       document.getElementById(id).classList.add('active-screen');
     }
 
+    // ★修正2: URLで部屋番号が指定された時だけリスナーを起動
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('room')) {
@@ -268,7 +269,6 @@
     };
 
     function createTeamObj(id, name, players) {
-      // throwHistory を追加して初期化
       return { id: id, name: name, players: players, gameScore: 0, totalScore: 0, misses: 0, status: 'playing', currentPlayerIdx: 0, throwHistory: [] };
     }
 
@@ -363,6 +363,8 @@
       state.currentTurnIdx = 0;
       state.history = [];
       syncToFirebase();
+      // ★修正3: ホスト側もここで初めてリスナーを起動する
+      listenToFirebase();
       showScreen('screen-play');
     }
 
@@ -371,7 +373,11 @@
       set(roomRef, state);
     }
 
+    // ★修正4: 無限ループ回避処理を追加したリスナー関数
     function listenToFirebase() {
+      if (!state.roomId || isListening) return;
+      isListening = true;
+
       const roomRef = ref(db, `rooms/${state.roomId}`);
       onValue(roomRef, (snapshot) => {
         const data = snapshot.val();
@@ -383,13 +389,17 @@
           state.teams.forEach(t => { if(!t.throwHistory) t.throwHistory = []; });
           updatePlayUI();
         } else {
-          alert("ルームが存在しないか、解散されました。");
-          location.href = location.href.split('?')[0];
+          // ★修正5: ルームが削除された場合は綺麗にタイトルに戻る
+          alert("ルームが終了（解散）されました。タイトル画面に戻ります。");
+          isListening = false; // リスナーを解除扱いにしておく
+          window.location.href = window.location.href.split('?')[0];
         }
       });
     }
 
     function updatePlayUI() {
+      if (!state.teamOrder || state.teamOrder.length === 0) return;
+
       const currentTeamId = state.teamOrder[state.currentTurnIdx];
       const currentTeam = state.teams.find(t => t.id === currentTeamId);
 
@@ -434,7 +444,6 @@
         `;
       });
       
-      // スコアシートが開いている場合はリアルタイムで表を更新
       if (document.getElementById('screen-scoresheet').classList.contains('active-screen')) {
         renderScoreSheet();
       }
@@ -482,7 +491,6 @@
       else if (selectedPins.length === 1) points = selectedPins[0];
       else points = selectedPins.length;
       
-      // ★投擲履歴の保存（スコアシート用）
       if(!team.throwHistory) team.throwHistory = [];
       team.throwHistory.push({
         points: points,
@@ -545,7 +553,6 @@
     };
 
     function handleGameEnd(winnerName) {
-      // スコアシートを見るように促す
       if (confirm(`🎉 ${winnerName} が50点に達しました！\n\n次のゲームに進む前に、現在のスコアシートを確認しますか？\n（キャンセルを押すとそのまま次のゲームに進みます）`)) {
         showScoreSheet();
       } else {
@@ -553,7 +560,6 @@
       }
     }
 
-    // 次のゲームに進む処理を分離
     window.proceedToNextGame = function() {
       if(confirm("次のゲーム（セット）の準備をします。点数を引き継いで順番設定へ進みますか？")) {
         state.gameNumber += 1;
@@ -565,7 +571,7 @@
           t.misses = 0;
           t.status = 'playing';
           t.currentPlayerIdx = 0;
-          t.throwHistory = []; // 新しいゲーム用に履歴をリセット
+          t.throwHistory = []; 
         });
         state.history = [];
         syncToFirebase();
@@ -573,11 +579,13 @@
       }
     };
 
+    // ★修正6: ゲーム終了時にデータベースからルームを自動削除し、ループに陥らずタイトルへ
     window.endGame = function() {
-      if (confirm("本当に終了してタイトルに戻りますか？\n部屋のデータは削除されます。")) {
+      if (confirm("全てのゲームを終了してタイトルに戻りますか？\n（このルームのデータは自動で完全に削除されます）")) {
         const roomRef = ref(db, `rooms/${state.roomId}`);
+        // データを削除する（他の参加者には「ルームが解散されました」と通知が行く）
         remove(roomRef).then(() => {
-          location.href = location.href.split('?')[0];
+          window.location.href = window.location.href.split('?')[0];
         });
       }
     };
@@ -593,9 +601,6 @@
       }
     };
 
-    // ==========================================
-    // 新機能：スコアシートの表示・描画ロジック
-    // ==========================================
     window.showScoreSheet = function() {
       renderScoreSheet();
       showScreen('screen-scoresheet');
@@ -603,7 +608,6 @@
 
     window.hideScoreSheet = function() {
       showScreen('screen-play');
-      // もし誰かが勝利していてシートを閉じたなら、次のゲームに行くか確認
       if(state.teams.some(t => t.status === 'winner')) {
         setTimeout(proceedToNextGame, 300);
       }
@@ -616,7 +620,6 @@
       const table = document.getElementById('scoresheet-table');
       table.innerHTML = '';
 
-      // 最大投擲数を取得（最低でも12列は確保して見た目を整える）
       let maxThrows = 12;
       state.teams.forEach(t => {
         if (t.throwHistory && t.throwHistory.length > maxThrows) {
@@ -624,7 +627,6 @@
         }
       });
 
-      // --- ヘッダー行の生成 ---
       let thead = `<thead><tr>
         <th style="min-width:80px;">チーム名</th>
         <th style="min-width:100px;">プレイヤー</th>
@@ -634,7 +636,6 @@
       }
       thead += `<th style="min-width:70px;">終了時点数</th></tr></thead>`;
       
-      // --- ボディ行の生成 ---
       let tbody = `<tbody>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
@@ -645,7 +646,6 @@
           <td style="font-size:12px;">${playersHtml}</td>
           <td>${team.totalScore}</td>`;
         
-        // 投擲履歴のセル
         for(let i = 0; i < maxThrows; i++) {
           let cellHtml = "";
           if (team.throwHistory && i < team.throwHistory.length) {
@@ -653,7 +653,6 @@
             if (th.isMiss) {
               cellHtml = "X";
             } else if (th.isSingle) {
-              // 1本のみ倒した場合は赤丸
               cellHtml = `<span class="red-circle">${th.points}</span>`;
             } else {
               cellHtml = th.points;
@@ -662,7 +661,6 @@
           tbody += `<td>${cellHtml}</td>`;
         }
 
-        // 終了時（現在）の点数
         const statusIcon = team.status === 'winner' ? ' 👑' : (team.status === 'disqualified' ? ' 💀' : '');
         tbody += `<td style="font-weight:bold; font-size:16px;">${team.gameScore}${statusIcon}</td>
         </tr>`;
@@ -671,10 +669,6 @@
 
       table.innerHTML = thead + tbody;
     };
-
-    if (!window.location.search.includes('room=')) {
-      listenToFirebase();
-    }
   </script>
 </body>
 </html>
