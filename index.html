@@ -171,7 +171,7 @@
 
   <div id="screen-scoresheet" class="screen" style="max-width: 800px;">
     <div class="no-print" style="margin-bottom: 20px; text-align: left;">
-      <button class="btn-secondary" onclick="hideScoreSheet()">◀ プレイ画面に戻る</button>
+      <button class="btn-secondary" onclick="hideScoreSheet()">◀ 戻る</button>
       <button class="btn-primary" style="float: right;" onclick="window.print()">🖨️ 印刷する</button>
     </div>
     
@@ -183,6 +183,20 @@
         </table>
     </div>
   </div>
+
+  <div id="screen-game-over" class="screen no-print">
+    <h2 style="color: #28a745; font-size: 28px; margin-bottom: 5px;">🎉 ゲーム終了！</h2>
+    <p id="game-over-winner" style="font-size: 20px; font-weight: bold; margin-bottom: 25px;">チーム名 が50点に達しました！</p>
+
+    <button class="btn-success" style="width: 100%; margin-bottom: 15px; padding: 15px; font-size: 18px;" onclick="proceedToNextGame()">▶ 次のゲームへ進む</button>
+    <button class="btn-info" style="width: 100%; margin-bottom: 15px; padding: 15px; font-size: 18px;" onclick="showScoreSheet()">📋 スコアシートを表示・印刷</button>
+    
+    <button class="btn-warning" style="width: 100%; margin-bottom: 10px; padding: 15px; font-size: 16px;" onclick="undoScoreFromGameOver()">↩ 最後の入力を取り消す（プレイ画面へ戻る）</button>
+    
+    <hr>
+    <button class="btn-danger" style="width: 100%; padding: 15px;" onclick="endGame()">🚪 全てのゲームを終了する (タイトルへ戻る)</button>
+  </div>
+
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
@@ -212,7 +226,6 @@
       history: []
     };
 
-    // ★修正1: リスナーの重複起動と無限ループを防ぐフラグ
     let isListening = false;
 
     function showScreen(id) {
@@ -220,7 +233,6 @@
       document.getElementById(id).classList.add('active-screen');
     }
 
-    // ★修正2: URLで部屋番号が指定された時だけリスナーを起動
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('room')) {
@@ -363,7 +375,6 @@
       state.currentTurnIdx = 0;
       state.history = [];
       syncToFirebase();
-      // ★修正3: ホスト側もここで初めてリスナーを起動する
       listenToFirebase();
       showScreen('screen-play');
     }
@@ -373,7 +384,6 @@
       set(roomRef, state);
     }
 
-    // ★修正4: 無限ループ回避処理を追加したリスナー関数
     function listenToFirebase() {
       if (!state.roomId || isListening) return;
       isListening = true;
@@ -389,9 +399,8 @@
           state.teams.forEach(t => { if(!t.throwHistory) t.throwHistory = []; });
           updatePlayUI();
         } else {
-          // ★修正5: ルームが削除された場合は綺麗にタイトルに戻る
           alert("ルームが終了（解散）されました。タイトル画面に戻ります。");
-          isListening = false; // リスナーを解除扱いにしておく
+          isListening = false;
           window.location.href = window.location.href.split('?')[0];
         }
       });
@@ -444,7 +453,23 @@
         `;
       });
       
-      if (document.getElementById('screen-scoresheet').classList.contains('active-screen')) {
+      // ★画面遷移の自動コントロール
+      const activeScreen = document.querySelector('.active-screen').id;
+      const winner = state.teams.find(t => t.status === 'winner');
+
+      if (winner && activeScreen === 'screen-play') {
+        // 誰かが上がっていて、まだプレイ画面にいる場合はリザルトへ移動
+        setTimeout(() => {
+          document.getElementById('game-over-winner').innerText = `${winner.name} が50点に達しました！`;
+          showScreen('screen-game-over');
+        }, 500);
+      } else if (!winner && activeScreen === 'screen-game-over') {
+        // 次のゲームに進んだ（または「戻る」ボタンが押された）ことで勝者がいなくなった場合、プレイ画面へ引き戻す
+        showScreen('screen-play');
+      }
+
+      // スコアシートが開いている場合はリアルタイム更新
+      if (activeScreen === 'screen-scoresheet') {
         renderScoreSheet();
       }
     }
@@ -518,9 +543,9 @@
         team.currentPlayerIdx = (team.currentPlayerIdx + 1) % team.players.length;
       }
 
+      // ★勝敗がついた場合でも、画面遷移は updatePlayUI() に任せるので同期するだけ
       if (team.status === 'winner') {
         syncToFirebase();
-        setTimeout(() => handleGameEnd(team.name), 500);
         return;
       }
 
@@ -552,38 +577,35 @@
       }
     };
 
-    function handleGameEnd(winnerName) {
-      if (confirm(`🎉 ${winnerName} が50点に達しました！\n\n次のゲームに進む前に、現在のスコアシートを確認しますか？\n（キャンセルを押すとそのまま次のゲームに進みます）`)) {
-        showScoreSheet();
-      } else {
-        proceedToNextGame();
-      }
-    }
-
-    window.proceedToNextGame = function() {
-      if(confirm("次のゲーム（セット）の準備をします。点数を引き継いで順番設定へ進みますか？")) {
-        state.gameNumber += 1;
-        state.gameDate = new Date().toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-        
-        state.teams.forEach(t => {
-          t.totalScore += t.gameScore;
-          t.gameScore = 0;
-          t.misses = 0;
-          t.status = 'playing';
-          t.currentPlayerIdx = 0;
-          t.throwHistory = []; 
-        });
-        state.history = [];
-        syncToFirebase();
-        startOrderSelectionPhase();
-      }
+    // ★リザルト画面から「間違えた！」と取り消すための関数
+    window.undoScoreFromGameOver = function() {
+      undoScore();
+      showScreen('screen-play');
     };
 
-    // ★修正6: ゲーム終了時にデータベースからルームを自動削除し、ループに陥らずタイトルへ
+    // ★次のゲームへ進む関数
+    window.proceedToNextGame = function() {
+      state.gameNumber += 1;
+      state.gameDate = new Date().toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      
+      state.teams.forEach(t => {
+        t.totalScore += t.gameScore;
+        t.gameScore = 0;
+        t.misses = 0;
+        t.status = 'playing';
+        t.currentPlayerIdx = 0;
+        t.throwHistory = []; 
+      });
+      state.history = [];
+      
+      // 同期する前に画面を順番設定画面に切り替える
+      startOrderSelectionPhase();
+      syncToFirebase();
+    };
+
     window.endGame = function() {
       if (confirm("全てのゲームを終了してタイトルに戻りますか？\n（このルームのデータは自動で完全に削除されます）")) {
         const roomRef = ref(db, `rooms/${state.roomId}`);
-        // データを削除する（他の参加者には「ルームが解散されました」と通知が行く）
         remove(roomRef).then(() => {
           window.location.href = window.location.href.split('?')[0];
         });
@@ -606,10 +628,12 @@
       showScreen('screen-scoresheet');
     };
 
+    // ★スコアシートから戻る際の処理
     window.hideScoreSheet = function() {
-      showScreen('screen-play');
       if(state.teams.some(t => t.status === 'winner')) {
-        setTimeout(proceedToNextGame, 300);
+        showScreen('screen-game-over'); // 勝負がついていればリザルト画面に戻す
+      } else {
+        showScreen('screen-play'); // プレイ中ならプレイ画面に戻す
       }
     };
 
