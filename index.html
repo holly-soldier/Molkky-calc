@@ -3,110 +3,187 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>モルック リアルタイムスコア</title>
+  <title>モルック スコアボード</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <style>
-    body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background-color: #f4f4f9; }
-    h1 { color: #333; margin-bottom: 10px; }
-    #setup-screen, #game-screen { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: 0 auto; }
-    input, button { padding: 10px; margin: 5px; font-size: 16px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
-    button { background-color: #28a745; color: white; border: none; cursor: pointer; }
-    button:active { background-color: #218838; }
-    .score-board { margin-top: 15px; text-align: left; }
+    /* ベーススタイル（画面用） */
+    body { font-family: sans-serif; text-align: center; margin: 0; padding: 10px; background-color: #f4f4f9; color: #333; }
+    .screen { display: none; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 450px; margin: 0 auto; box-sizing: border-box; }
+    .active-screen { display: block; }
+    h1, h2, h3 { margin-top: 0; }
+    button { padding: 12px; margin: 5px; font-size: 16px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; }
+    .btn-primary { background-color: #007bff; }
+    .btn-success { background-color: #28a745; }
+    .btn-warning { background-color: #ffc107; color: #333; }
+    .btn-danger { background-color: #dc3545; }
+    .btn-secondary { background-color: #6c757d; }
+    .btn-info { background-color: #17a2b8; }
+    input[type="text"] { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
     
-    /* カードのデザインとアニメーション */
-    .player-card { 
-      padding: 15px; 
-      margin-bottom: 10px; 
-      border-radius: 8px; 
-      display: flex; 
-      justify-content: space-between; 
-      align-items: center; 
-      cursor: pointer; /* タップできることを示す指マーク */
-      transition: all 0.2s ease-in-out; /* ふんわり変化させる */
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    /* 選択されていない状態 */
-    .player-card:not(.selected-card) {
-      border: 1px solid #ddd;
-      background-color: #fff;
-    }
-    /* ★ 選択されている状態（青枠で強調） */
-    .player-card.selected-card {
-      border: 3px solid #007bff;
-      background-color: #f0f8ff;
-      transform: scale(1.02); /* 少しだけ大きくする */
-      box-shadow: 0 4px 8px rgba(0,123,255,0.2);
-    }
+    .molkky-layout { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 15px 0; }
+    .molkky-row { display: flex; gap: 8px; justify-content: center; }
+    .pin { width: 50px; height: 50px; border-radius: 50%; background-color: #e9ecef; color: #333; font-size: 20px; border: 2px solid #ccc; transition: all 0.2s; display: flex; justify-content: center; align-items: center; cursor: pointer; padding: 0;}
+    .pin.selected { background-color: #28a745; color: white; border-color: #1e7e34; transform: scale(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+    
+    .current-turn-box { background: #007bff; color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+    .current-turn-box h2 { margin: 0 0 10px 0; font-size: 24px; }
+    .current-turn-box .stats { display: flex; justify-content: space-around; font-size: 18px; }
+    .action-buttons { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 10px; }
+    .action-buttons button { flex: 1; margin: 0; padding: 15px; font-size: 18px; }
+    
+    .team-card { border: 2px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 8px; text-align: left; background: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .team-card.active { border-color: #007bff; background: #e6f2ff; box-shadow: 0 0 10px rgba(0,123,255,0.3); }
+    .team-card.winner { background-color: #fff3cd; border-color: #ffeeba; }
+    .team-card.disqualified { background-color: #e9ecef; color: #6c757d; }
+    .team-info { flex: 1; }
+    .team-scores { text-align: right; }
+    .total-score { font-size: 12px; color: #666; }
+    .game-score { font-size: 22px; font-weight: bold; }
+    .miss-marks { color: red; font-size: 14px; }
 
-    .player-info { font-size: 18px; font-weight: bold; pointer-events: none; }
-    .miss-marks { color: red; font-size: 14px; pointer-events: none; }
-    .score-display { font-size: 24px; font-weight: bold; pointer-events: none; }
+    .order-list-item { padding: 15px; border: 1px solid #ccc; margin-bottom: 5px; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; background: #f9f9f9; }
+    .order-list-item.selected { background: #d4edda; border-color: #28a745; }
+    .order-badge { background: #28a745; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; justify-content: center; align-items: center; font-size: 14px; font-weight: bold;}
 
-    .input-area { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 10px; }
-    .btn-score { background-color: #007bff; }
-    .btn-miss { background-color: #dc3545; }
-    .btn-undo { background-color: #ffc107; color: #333; font-weight: bold; width: 100%; margin-top: 15px; }
-    .btn-share { background-color: #17a2b8; padding: 5px 10px; font-size: 14px; }
-    .btn-delete { background-color: #6c757d; color: white; width: 100%; margin-top: 20px; font-size: 14px; }
-    
-    .winner { background-color: #fff3cd !important; border-color: #ffeeba !important; }
-    .disqualified { background-color: #e9ecef !important; color: #6c757d; text-decoration: line-through; border-color: #ccc !important; }
-    
-    .control-box { background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 15px; text-align: left; }
-    hr { border: 0; height: 1px; background: #ddd; margin: 20px 0; }
+    hr { border: 0; height: 1px; background: #ccc; margin: 20px 0; }
+
+    /* スコアシート（テーブル）用のスタイル */
+    .table-container { overflow-x: auto; margin-top: 15px; }
+    .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 600px; }
+    .scoresheet-table th, .scoresheet-table td { border: 1px solid #555; padding: 8px; text-align: center; vertical-align: middle; }
+    .scoresheet-table th { background-color: #e9ecef; }
+    /* 交互の背景色（白と薄灰色） */
+    .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2; }
+    .scoresheet-table tbody tr:nth-child(odd) { background-color: #ffffff; }
+    /* 赤丸スタイル */
+    .red-circle { display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 22px; border: 2px solid #e53935; border-radius: 50%; color: #e53935; font-weight: bold; }
+
+    /* 印刷時の設定（画面のUIを隠してテーブルを全画面に） */
+    @media print {
+      body { background-color: white; padding: 0; }
+      .screen { box-shadow: none; max-width: 100%; padding: 0; margin: 0; }
+      .no-print { display: none !important; }
+      .scoresheet-table { width: 100%; min-width: auto; font-size: 12pt; border: 2px solid #000; }
+      .scoresheet-table th, .scoresheet-table td { border: 1px solid #000; padding: 5px; }
+      .red-circle { border-color: red !important; color: red !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   </style>
 </head>
 <body>
 
-  <h1>モルック スコアボード</h1>
-
-  <div id="setup-screen">
-    <p>合言葉（ルームID）を決めて共有してください。</p>
-    <input type="text" id="room-id" placeholder="例: molkky2026" required>
-    <br>
-    <input type="text" id="player-name" placeholder="最初のプレイヤー名" required>
-    <br>
-    <button id="btn-join" style="width: 100%; margin-top: 10px;">ルームを作成 / 参加</button>
+  <div id="screen-title" class="screen active-screen no-print">
+    <h1>モルック スコアボード</h1>
+    <div style="text-align: left; background: #f8f9fa; padding: 15px; border-radius: 8px; font-size: 14px; margin-bottom: 20px;">
+      <b>【モルックのルール】</b><br>
+      ・1本だけ倒した場合は、ピンに書かれた数字が得点になります。<br>
+      ・複数本倒した場合は、倒した「本数」が得点になります。<br>
+      ・ピッタリ50点になったら勝利です。<br>
+      ・50点を超えると、25点に減点されて継続となります。<br>
+      ・3回連続で1本も倒せなかった（ファウル）場合は失格です。
+    </div>
+    <button class="btn-primary" style="width: 100%; font-size: 20px; padding: 15px;" onclick="startSetup()">スタート</button>
   </div>
 
-  <div id="game-screen" style="display: none;">
-    <h2 style="margin-top: 0; font-size: 20px;">
-      ルーム: <span id="display-room-id"></span>
-      <button class="btn-share" onclick="toggleQRCode()">📱 QRで共有</button>
-    </h2>
+  <div id="screen-team-count" class="screen no-print">
+    <h2>プレイするチーム数は？</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <button class="btn-primary" onclick="selectTeamCount(1)">1 チーム</button>
+      <button class="btn-primary" onclick="selectTeamCount(2)">2 チーム</button>
+      <button class="btn-primary" onclick="selectTeamCount(3)">3 チーム</button>
+      <button class="btn-primary" onclick="selectTeamCount(4)">4 チーム</button>
+    </div>
+  </div>
+
+  <div id="screen-name-confirm" class="screen no-print">
+    <h2>名前を設定しますか？</h2>
+    <p style="font-size: 14px; color: #555;">「いいえ」を選ぶと「チーム1」「チーム2」と自動設定され、プレイヤー名なしで開始します。</p>
+    <button class="btn-success" onclick="goToNameInput(true)" style="width: 100%;">はい（チーム名・プレイヤー名を入力）</button>
+    <button class="btn-secondary" onclick="goToNameInput(false)" style="width: 100%; margin-top: 10px;">いいえ（デフォルト設定で進む）</button>
+  </div>
+
+  <div id="screen-name-input" class="screen no-print">
+    <h2>名前の入力</h2>
+    <p style="font-size: 12px; color: #666;">※プレイヤー名は空欄でもOKです（最大4名）</p>
+    <div id="name-input-container" style="text-align: left; max-height: 60vh; overflow-y: auto;"></div>
+    <button class="btn-success" style="width: 100%; margin-top: 15px;" onclick="finishNameInput()">順番の設定へ進む</button>
+  </div>
+
+  <div id="screen-order" class="screen no-print">
+    <h2 id="order-title">投げる順番を選んでください</h2>
+    <p id="order-desc" style="font-size: 14px; color: #555;">タップした順に番号が振られます。</p>
+    <div id="order-list" style="text-align: left;"></div>
+    <button class="btn-warning" style="width: 100%; margin-top: 15px;" onclick="resetOrderSelection()">選び直す</button>
+    <button class="btn-success" id="btn-order-next" style="width: 100%; margin-top: 10px; display: none;" onclick="confirmOrder()">決定して次へ</button>
+  </div>
+
+  <div id="screen-play" class="screen no-print">
     
-    <div id="qr-container" style="display: none; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 15px;">
-      <p style="margin: 0 0 10px 0; font-size: 14px; color: #555;">このQRをスキャンして入室！</p>
-      <canvas id="qr-code"></canvas>
+    <div id="current-turn-display" class="current-turn-box">
+      <h2 id="play-current-team">チーム名</h2>
+      <div id="play-current-player" style="font-size: 18px; margin-bottom: 5px;">プレイヤー名</div>
+      <div class="stats">
+        <div>得点: <span id="play-current-score" style="font-weight: bold; font-size: 24px;">0</span></div>
+        <div>ミス: <span id="play-current-miss">0</span></div>
+      </div>
     </div>
 
-    <p style="font-size: 14px; color: #007bff; font-weight: bold; margin-bottom: 5px;">👇 点数を入力する人をタップ！</p>
-
-    <div id="score-list" class="score-board"></div>
-
-    <div id="controls-area">
-      <div class="control-box">
-        <div class="input-area">
-          <script>
-            for (let i = 1; i <= 12; i++) {
-              document.write(`<button class="btn-score" onclick="addScore(${i})">${i}点</button>`);
-            }
-          </script>
-          <button class="btn-miss" onclick="addScore(0)">ミス(0点)</button>
+    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+      <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">倒したピンをタップしてください</div>
+      <div class="molkky-layout">
+        <div class="molkky-row">
+          <button class="pin" onclick="togglePin(7, this)">7</button>
+          <button class="pin" onclick="togglePin(8, this)">8</button>
+          <button class="pin" onclick="togglePin(9, this)">9</button>
         </div>
-        
-        <button class="btn-undo" onclick="undoScore()">↩ 選択中の人の入力を1つ取り消す</button>
+        <div class="molkky-row">
+          <button class="pin" onclick="togglePin(5, this)">5</button>
+          <button class="pin" onclick="togglePin(11, this)">11</button>
+          <button class="pin" onclick="togglePin(12, this)">12</button>
+          <button class="pin" onclick="togglePin(6, this)">6</button>
+        </div>
+        <div class="molkky-row">
+          <button class="pin" onclick="togglePin(3, this)">3</button>
+          <button class="pin" onclick="togglePin(10, this)">10</button>
+          <button class="pin" onclick="togglePin(4, this)">4</button>
+        </div>
+        <div class="molkky-row">
+          <button class="pin" onclick="togglePin(1, this)">1</button>
+          <button class="pin" onclick="togglePin(2, this)">2</button>
+        </div>
       </div>
+      <p id="calc-preview" style="font-weight: bold; color: #d32f2f; height: 20px; margin: 5px 0;">0本選択 (0点: ミス)</p>
+    </div>
 
-      <hr>
+    <div class="action-buttons">
+      <button class="btn-warning" onclick="undoScore()">左: 戻る(取消)</button>
+      <button class="btn-primary" onclick="submitScore()">右: 決定(反映)</button>
+    </div>
 
-      <div style="display: flex; gap: 5px;">
-        <input type="text" id="new-player-name" placeholder="新しいプレイヤー名" style="flex: 1; margin: 0;">
-        <button onclick="addNewPlayer()" style="margin: 0; white-space: nowrap;">追加</button>
-      </div>
+    <div id="play-scoreboard" style="margin-bottom: 20px;"></div>
 
-      <button class="btn-delete" onclick="deleteRoom()">🗑️ ルームを解散する（全データ削除）</button>
+    <hr>
+    <button class="btn-info" style="width: 100%; margin-bottom: 10px;" onclick="showScoreSheet()">📋 スコアシートを表示 (印刷対応)</button>
+    
+    <button class="btn-secondary" style="width: 100%; margin-bottom: 10px;" onclick="toggleQR()">📱 QRコードで共有</button>
+    <div id="qr-container" style="display: none; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 10px;">
+      <canvas id="qr-code"></canvas>
+    </div>
+    <button class="btn-danger" style="width: 100%;" onclick="endGame()">ゲーム終了 (最初に戻る)</button>
+  </div>
+
+  <div id="screen-scoresheet" class="screen" style="max-width: 800px;">
+    <div class="no-print" style="margin-bottom: 20px; text-align: left;">
+      <button class="btn-secondary" onclick="hideScoreSheet()">◀ プレイ画面に戻る</button>
+      <button class="btn-primary" style="float: right;" onclick="window.print()">🖨️ 印刷する</button>
+    </div>
+    
+    <h2 id="sheet-title" style="margin-bottom: 5px;">モルック スコアシート</h2>
+    <div id="sheet-date" style="text-align: right; font-size: 14px; margin-bottom: 10px; color: #555;"></div>
+
+    <div class="table-container">
+      <table class="scoresheet-table" id="scoresheet-table">
+        </table>
     </div>
   </div>
 
@@ -121,207 +198,483 @@
       projectId: "molkky-calc",
       storageBucket: "molkky-calc.firebasestorage.app",
       messagingSenderId: "621719615552",
-      appId: "1:621719615552:web:823e8b2c44a05b6741c7a5",
-      measurementId: "G-BV6D5T8FMB"
+      appId: "1:621719615552:web:823e8b2c44a05b6741c7a5"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    let currentRoomId = "";
-    let initialPlayerName = "";
-    
-    // ★ 追加：現在選択されているプレイヤーと、最新のデータを記憶する変数
-    let targetPlayerName = ""; 
-    let currentPlayersData = null;
+    let state = {
+      roomId: "",
+      teamCount: 0,
+      gameNumber: 1, // 新規：ゲーム数
+      gameDate: "",  // 新規：ゲーム開始日時
+      teams: [], // throwHistory: [] を新規追加
+      teamOrder: [],
+      currentTurnIdx: 0,
+      history: []
+    };
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active-screen'));
+      document.getElementById(id).classList.add('active-screen');
+    }
 
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.has('room')) {
-        document.getElementById('room-id').value = urlParams.get('room');
+        state.roomId = urlParams.get('room');
+        listenToFirebase();
+        showScreen('screen-play');
       }
     };
 
-    document.getElementById('btn-join').addEventListener('click', () => {
-      currentRoomId = document.getElementById('room-id').value.trim();
-      initialPlayerName = document.getElementById('player-name').value.trim();
+    window.startSetup = function() {
+      state.roomId = Math.random().toString(36).substring(2, 10);
+      state.gameNumber = 1;
+      state.gameDate = new Date().toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+      showScreen('screen-team-count');
+    };
 
-      if (!currentRoomId || !initialPlayerName) {
-        alert("ルームIDと名前を入力してください");
-        return;
-      }
+    window.selectTeamCount = function(count) {
+      state.teamCount = count;
+      showScreen('screen-name-confirm');
+    };
 
-      document.getElementById('setup-screen').style.display = 'none';
-      document.getElementById('game-screen').style.display = 'block';
-      document.getElementById('display-room-id').innerText = currentRoomId;
-
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${initialPlayerName}`);
-      get(playerRef).then((snapshot) => {
-        if (!snapshot.exists()) {
-          set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] });
+    window.goToNameInput = function(wantInput) {
+      state.teams = [];
+      if (!wantInput) {
+        for(let i=1; i<=state.teamCount; i++) {
+          state.teams.push(createTeamObj(`t${i}`, `チーム ${i}`, []));
         }
-      });
+        startOrderSelectionPhase();
+      } else {
+        const container = document.getElementById('name-input-container');
+        container.innerHTML = '';
+        for(let i=1; i<=state.teamCount; i++) {
+          let html = `<div style="background:#f8f9fa; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
+                        <label style="font-weight:bold;">チーム ${i} の名前:</label>
+                        <input type="text" id="tname-${i}" value="チーム ${i}">
+                        <div style="font-size:14px; margin-top:5px;">プレイヤー名 (最大4名):</div>
+                        <input type="text" id="pname-${i}-1" placeholder="プレイヤー 1">
+                        <input type="text" id="pname-${i}-2" placeholder="プレイヤー 2">
+                        <input type="text" id="pname-${i}-3" placeholder="プレイヤー 3">
+                        <input type="text" id="pname-${i}-4" placeholder="プレイヤー 4">
+                      </div>`;
+          container.innerHTML += html;
+        }
+        showScreen('screen-name-input');
+      }
+    };
 
-      const roomRef = ref(db, `rooms/${currentRoomId}/players`);
-      onValue(roomRef, (snapshot) => {
-        const players = snapshot.val();
-        
-        if (players === null) {
-          document.getElementById('score-list').innerHTML = "<p style='color:red; font-weight:bold;'>ルームが解散されました。</p>";
-          document.getElementById('controls-area').style.display = 'none';
+    function createTeamObj(id, name, players) {
+      // throwHistory を追加して初期化
+      return { id: id, name: name, players: players, gameScore: 0, totalScore: 0, misses: 0, status: 'playing', currentPlayerIdx: 0, throwHistory: [] };
+    }
+
+    window.finishNameInput = function() {
+      state.teams = [];
+      for(let i=1; i<=state.teamCount; i++) {
+        const tName = document.getElementById(`tname-${i}`).value || `チーム ${i}`;
+        let players = [];
+        for(let j=1; j<=4; j++) {
+          const pName = document.getElementById(`pname-${i}-${j}`).value.trim();
+          if(pName) players.push(pName);
+        }
+        state.teams.push(createTeamObj(`t${i}`, tName, players));
+      }
+      startOrderSelectionPhase();
+    };
+
+    let orderPhase = "team";
+    let currentOrderTeamIndex = 0;
+    let tempOrderList = []; 
+    let selectedOrder = [];
+
+    function startOrderSelectionPhase() {
+      orderPhase = "team";
+      tempOrderList = state.teams.map(t => ({ id: t.id, name: t.name }));
+      renderOrderScreen("チームの投げる順番", tempOrderList);
+      showScreen('screen-order');
+    }
+
+    function renderOrderScreen(title, list) {
+      document.getElementById('order-title').innerText = title;
+      selectedOrder = [];
+      document.getElementById('btn-order-next').style.display = 'none';
+      const container = document.getElementById('order-list');
+      container.innerHTML = '';
+      
+      list.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'order-list-item';
+        div.id = `order-item-${item.id}`;
+        div.innerHTML = `<span>${item.name}</span> <span class="order-badge" id="order-badge-${item.id}" style="display:none;"></span>`;
+        div.onclick = () => selectOrderItem(item.id);
+        container.appendChild(div);
+      });
+    }
+
+    window.selectOrderItem = function(id) {
+      if(selectedOrder.includes(id)) return;
+      selectedOrder.push(id);
+      const div = document.getElementById(`order-item-${id}`);
+      const badge = document.getElementById(`order-badge-${id}`);
+      div.classList.add('selected');
+      badge.style.display = 'inline-flex';
+      badge.innerText = selectedOrder.length;
+
+      if(selectedOrder.length === tempOrderList.length) {
+        document.getElementById('btn-order-next').style.display = 'block';
+      }
+    };
+
+    window.resetOrderSelection = function() {
+      renderOrderScreen(document.getElementById('order-title').innerText, tempOrderList);
+    };
+
+    window.confirmOrder = function() {
+      if (orderPhase === "team") {
+        state.teamOrder = [...selectedOrder];
+        currentOrderTeamIndex = 0;
+        checkNextPlayerOrder();
+      } else if (orderPhase === "player") {
+        const teamId = state.teamOrder[currentOrderTeamIndex];
+        const team = state.teams.find(t => t.id === teamId);
+        team.players = selectedOrder.map(pid => tempOrderList.find(p => p.id === pid).name);
+        currentOrderTeamIndex++;
+        checkNextPlayerOrder();
+      }
+    };
+
+    function checkNextPlayerOrder() {
+      while (currentOrderTeamIndex < state.teams.length) {
+        const teamId = state.teamOrder[currentOrderTeamIndex];
+        const team = state.teams.find(t => t.id === teamId);
+        if (team.players && team.players.length > 1) {
+          orderPhase = "player";
+          tempOrderList = team.players.map((pName, idx) => ({ id: `p${idx}`, name: pName }));
+          renderOrderScreen(`[${team.name}] プレイヤーの投げる順番`, tempOrderList);
           return;
         }
+        currentOrderTeamIndex++;
+      }
+      
+      state.currentTurnIdx = 0;
+      state.history = [];
+      syncToFirebase();
+      showScreen('screen-play');
+    }
 
-        document.getElementById('controls-area').style.display = 'block';
-        updateScoreBoard(players);
+    function syncToFirebase() {
+      const roomRef = ref(db, `rooms/${state.roomId}`);
+      set(roomRef, state);
+    }
+
+    function listenToFirebase() {
+      const roomRef = ref(db, `rooms/${state.roomId}`);
+      onValue(roomRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          state = data;
+          if(!state.history) state.history = [];
+          if(!state.gameNumber) state.gameNumber = 1;
+          if(!state.gameDate) state.gameDate = new Date().toLocaleString('ja-JP');
+          state.teams.forEach(t => { if(!t.throwHistory) t.throwHistory = []; });
+          updatePlayUI();
+        } else {
+          alert("ルームが存在しないか、解散されました。");
+          location.href = location.href.split('?')[0];
+        }
       });
-    });
+    }
 
-    // ★ 新機能：カードをタップした時に呼ばれる関数
-    window.selectPlayer = function(name) {
-      targetPlayerName = name; // 選択された人の名前をセット
-      if (currentPlayersData) {
-        updateScoreBoard(currentPlayersData); // 画面を再描画して青枠をつける
+    function updatePlayUI() {
+      const currentTeamId = state.teamOrder[state.currentTurnIdx];
+      const currentTeam = state.teams.find(t => t.id === currentTeamId);
+
+      document.getElementById('play-current-team').innerText = currentTeam.name;
+      if (currentTeam.players && currentTeam.players.length > 0) {
+        document.getElementById('play-current-player').innerText = "投擲: " + currentTeam.players[currentTeam.currentPlayerIdx];
+        document.getElementById('play-current-player').style.display = 'block';
+      } else {
+        document.getElementById('play-current-player').style.display = 'none';
       }
-    };
+      document.getElementById('play-current-score').innerText = currentTeam.gameScore;
+      document.getElementById('play-current-miss').innerText = currentTeam.misses;
 
-    function updateScoreBoard(players) {
-      currentPlayersData = players; // 最新のデータを記憶
-      const scoreList = document.getElementById('score-list');
-      scoreList.innerHTML = '';
-      if (!players) return;
+      selectedPins = [];
+      document.querySelectorAll('.pin').forEach(btn => btn.classList.remove('selected'));
+      updateCalcPreview();
 
-      // 誰も選択されていない場合は、最初のプレイヤーを自動選択する
-      if (!targetPlayerName || !players[targetPlayerName]) {
-        targetPlayerName = players[initialPlayerName] ? initialPlayerName : Object.keys(players)[0];
-      }
+      const board = document.getElementById('play-scoreboard');
+      board.innerHTML = '';
+      
+      state.teamOrder.forEach(tId => {
+        const team = state.teams.find(t => t.id === tId);
+        let cardClass = "team-card";
+        if (tId === currentTeamId) cardClass += " active";
+        if (team.status === 'winner') cardClass += " winner";
+        if (team.status === 'disqualified') cardClass += " disqualified";
 
-      for (const [name, data] of Object.entries(players)) {
-        let cardClass = "player-card";
-        let statusText = "";
+        const missMarks = "❌".repeat(team.misses);
+        let statusText = team.status === 'winner' ? '🎉 50点！' : (team.status === 'disqualified' ? '💀 失格' : '');
 
-        // ★ 選択中の人のカードには特別なクラス（青枠）を追加
-        if (name === targetPlayerName) {
-          cardClass += " selected-card";
-        }
-
-        if (data.status === 'winner') {
-          cardClass += " winner";
-          statusText = " 🎉 50点達成！";
-        } else if (data.status === 'disqualified') {
-          cardClass += " disqualified";
-          statusText = " 💀 失格";
-        }
-        const missMarks = "❌".repeat(data.miss || 0);
-
-        // ★ onclick="selectPlayer('${name}')" を追加し、カード全体をタップ可能に
-        scoreList.innerHTML += `
-          <div class="${cardClass}" onclick="selectPlayer('${name}')">
-            <div class="player-info">${name} ${statusText}
-              <br><span class="miss-marks">${missMarks}</span>
+        board.innerHTML += `
+          <div class="${cardClass}">
+            <div class="team-info">
+              <div style="font-weight:bold; font-size:18px;">${team.name} <span style="font-size:14px;color:red;">${statusText}</span></div>
+              <div class="total-score">これまでの合計: ${team.totalScore}点</div>
+              <div class="miss-marks">${missMarks}</div>
             </div>
-            <div class="score-display">${data.score} 点</div>
+            <div class="team-scores">
+              <div class="game-score">${team.gameScore} 点</div>
+            </div>
           </div>
         `;
+      });
+      
+      // スコアシートが開いている場合はリアルタイムで表を更新
+      if (document.getElementById('screen-scoresheet').classList.contains('active-screen')) {
+        renderScoreSheet();
       }
     }
 
-    // ★ 入力先をセレクトボックスから、タップで選んだ人に変更
-    window.addScore = async function(points) {
-      if (!targetPlayerName) return;
-
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetPlayerName}`);
-      get(playerRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          let data = snapshot.val();
-          if (data.status !== 'playing') return;
-
-          if (!data.history) data.history = [];
-          data.history.push({ score: data.score, miss: data.miss, status: data.status });
-
-          if (points === 0) {
-            data.miss += 1;
-            if (data.miss >= 3) {
-              data.score = 0;
-              data.status = 'disqualified';
-            }
-          } else {
-            data.miss = 0;
-            data.score += points;
-            if (data.score === 50) {
-              data.status = 'winner';
-            } else if (data.score > 50) {
-              data.score = 25;
-            }
-          }
-          set(playerRef, data);
-        }
-      });
+    let selectedPins = [];
+    
+    window.togglePin = function(val, btnElement) {
+      const idx = selectedPins.indexOf(val);
+      if (idx > -1) {
+        selectedPins.splice(idx, 1);
+        btnElement.classList.remove('selected');
+      } else {
+        selectedPins.push(val);
+        btnElement.classList.add('selected');
+      }
+      updateCalcPreview();
     };
 
-    window.undoScore = async function() {
-      if (!targetPlayerName) return;
+    function updateCalcPreview() {
+      const preview = document.getElementById('calc-preview');
+      if (selectedPins.length === 0) {
+        preview.innerText = "0本選択 (0点: ミス)";
+        preview.style.color = "#d32f2f";
+      } else if (selectedPins.length === 1) {
+        preview.innerText = `1本選択 (${selectedPins[0]}点: ピンの数字)`;
+        preview.style.color = "#1976d2";
+      } else {
+        preview.innerText = `${selectedPins.length}本選択 (${selectedPins.length}点: 倒した本数)`;
+        preview.style.color = "#388e3c";
+      }
+    }
 
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${targetPlayerName}`);
-      get(playerRef).then((snapshot) => {
-        if (snapshot.exists()) {
-          let data = snapshot.val();
-          if (data.history && data.history.length > 0) {
-            const prevState = data.history.pop();
-            data.score = prevState.score;
-            data.miss = prevState.miss;
-            data.status = prevState.status;
-            set(playerRef, data);
-          } else {
-            alert("これ以上、前の状態に戻すことはできません。");
-          }
-        }
-      });
-    };
+    window.submitScore = function() {
+      state.history.push(JSON.parse(JSON.stringify({
+        teams: state.teams,
+        currentTurnIdx: state.currentTurnIdx
+      })));
 
-    window.addNewPlayer = async function() {
-      const newNameInput = document.getElementById('new-player-name');
-      const newName = newNameInput.value.trim();
+      const currentTeamId = state.teamOrder[state.currentTurnIdx];
+      const team = state.teams.find(t => t.id === currentTeamId);
+
+      let points = 0;
+      if (selectedPins.length === 0) points = 0;
+      else if (selectedPins.length === 1) points = selectedPins[0];
+      else points = selectedPins.length;
       
-      if (!newName) {
-        alert("名前を入力してください");
+      // ★投擲履歴の保存（スコアシート用）
+      if(!team.throwHistory) team.throwHistory = [];
+      team.throwHistory.push({
+        points: points,
+        isSingle: selectedPins.length === 1,
+        isMiss: selectedPins.length === 0
+      });
+
+      if (points === 0) {
+        team.misses += 1;
+        if (team.misses >= 3) {
+          team.gameScore = 0;
+          team.status = 'disqualified';
+        }
+      } else {
+        team.misses = 0;
+        team.gameScore += points;
+        if (team.gameScore === 50) {
+          team.status = 'winner';
+        } else if (team.gameScore > 50) {
+          team.gameScore = 25;
+        }
+      }
+
+      if (team.players && team.players.length > 0) {
+        team.currentPlayerIdx = (team.currentPlayerIdx + 1) % team.players.length;
+      }
+
+      if (team.status === 'winner') {
+        syncToFirebase();
+        setTimeout(() => handleGameEnd(team.name), 500);
         return;
       }
 
-      const playerRef = ref(db, `rooms/${currentRoomId}/players/${newName}`);
-      get(playerRef).then((snapshot) => {
-        if (!snapshot.exists()) {
-          set(playerRef, { score: 0, miss: 0, status: 'playing', history: [] }).then(() => {
-            newNameInput.value = '';
-            // ★ 新しく追加した人を自動で「選択状態」にする
-            targetPlayerName = newName; 
-          });
-        } else {
-          alert("すでに同じ名前のプレイヤーがいます！");
-        }
-      });
+      advanceTurn();
+      syncToFirebase();
     };
 
-    window.toggleQRCode = function() {
+    function advanceTurn() {
+      let startIndex = state.currentTurnIdx;
+      while (true) {
+        state.currentTurnIdx = (state.currentTurnIdx + 1) % state.teamOrder.length;
+        const nextTeam = state.teams.find(t => t.id === state.teamOrder[state.currentTurnIdx]);
+        if (nextTeam.status === 'playing') break;
+        if (state.currentTurnIdx === startIndex) {
+          setTimeout(() => alert("全員が失格または上がりとなりました。ゲームを終了します。"), 100);
+          break;
+        }
+      }
+    }
+
+    window.undoScore = function() {
+      if (state.history && state.history.length > 0) {
+        const prevState = state.history.pop();
+        state.teams = prevState.teams;
+        state.currentTurnIdx = prevState.currentTurnIdx;
+        syncToFirebase();
+      } else {
+        alert("これ以上戻せません。");
+      }
+    };
+
+    function handleGameEnd(winnerName) {
+      // スコアシートを見るように促す
+      if (confirm(`🎉 ${winnerName} が50点に達しました！\n\n次のゲームに進む前に、現在のスコアシートを確認しますか？\n（キャンセルを押すとそのまま次のゲームに進みます）`)) {
+        showScoreSheet();
+      } else {
+        proceedToNextGame();
+      }
+    }
+
+    // 次のゲームに進む処理を分離
+    window.proceedToNextGame = function() {
+      if(confirm("次のゲーム（セット）の準備をします。点数を引き継いで順番設定へ進みますか？")) {
+        state.gameNumber += 1;
+        state.gameDate = new Date().toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+        
+        state.teams.forEach(t => {
+          t.totalScore += t.gameScore;
+          t.gameScore = 0;
+          t.misses = 0;
+          t.status = 'playing';
+          t.currentPlayerIdx = 0;
+          t.throwHistory = []; // 新しいゲーム用に履歴をリセット
+        });
+        state.history = [];
+        syncToFirebase();
+        startOrderSelectionPhase();
+      }
+    };
+
+    window.endGame = function() {
+      if (confirm("本当に終了してタイトルに戻りますか？\n部屋のデータは削除されます。")) {
+        const roomRef = ref(db, `rooms/${state.roomId}`);
+        remove(roomRef).then(() => {
+          location.href = location.href.split('?')[0];
+        });
+      }
+    };
+
+    window.toggleQR = function() {
       const container = document.getElementById('qr-container');
       if (container.style.display === 'none') {
         container.style.display = 'block';
-        const baseUrl = window.location.href.split('?')[0];
-        const shareUrl = `${baseUrl}?room=${encodeURIComponent(currentRoomId)}`;
-        new QRious({ element: document.getElementById('qr-code'), value: shareUrl, size: 150, background: 'white', foreground: 'black' });
+        const shareUrl = `${location.href.split('?')[0]}?room=${state.roomId}`;
+        new QRious({ element: document.getElementById('qr-code'), value: shareUrl, size: 200 });
       } else {
         container.style.display = 'none';
       }
     };
 
-    window.deleteRoom = async function() {
-      if (confirm("本当にルームを解散しますか？\n全員のデータが完全に削除されます。")) {
-        const currentRoomRef = ref(db, `rooms/${currentRoomId}`);
-        remove(currentRoomRef).then(() => {
-          window.location.href = window.location.href.split('?')[0];
-        });
+    // ==========================================
+    // 新機能：スコアシートの表示・描画ロジック
+    // ==========================================
+    window.showScoreSheet = function() {
+      renderScoreSheet();
+      showScreen('screen-scoresheet');
+    };
+
+    window.hideScoreSheet = function() {
+      showScreen('screen-play');
+      // もし誰かが勝利していてシートを閉じたなら、次のゲームに行くか確認
+      if(state.teams.some(t => t.status === 'winner')) {
+        setTimeout(proceedToNextGame, 300);
       }
     };
+
+    window.renderScoreSheet = function() {
+      document.getElementById('sheet-title').innerText = `第 ${state.gameNumber || 1} ゲーム スコアシート`;
+      document.getElementById('sheet-date').innerText = `日時: ${state.gameDate || ''}`;
+
+      const table = document.getElementById('scoresheet-table');
+      table.innerHTML = '';
+
+      // 最大投擲数を取得（最低でも12列は確保して見た目を整える）
+      let maxThrows = 12;
+      state.teams.forEach(t => {
+        if (t.throwHistory && t.throwHistory.length > maxThrows) {
+          maxThrows = t.throwHistory.length;
+        }
+      });
+
+      // --- ヘッダー行の生成 ---
+      let thead = `<thead><tr>
+        <th style="min-width:80px;">チーム名</th>
+        <th style="min-width:100px;">プレイヤー</th>
+        <th style="min-width:60px;">前G合計</th>`;
+      for(let i = 1; i <= maxThrows; i++) {
+        thead += `<th style="min-width:35px;">${i}</th>`;
+      }
+      thead += `<th style="min-width:70px;">終了時点数</th></tr></thead>`;
+      
+      // --- ボディ行の生成 ---
+      let tbody = `<tbody>`;
+      state.teamOrder.forEach(tId => {
+        const team = state.teams.find(t => t.id === tId);
+        const playersHtml = (team.players && team.players.length > 0) ? team.players.join('<br>') : '<span style="color:#aaa;">(なし)</span>';
+        
+        tbody += `<tr>
+          <td style="font-weight:bold;">${team.name}</td>
+          <td style="font-size:12px;">${playersHtml}</td>
+          <td>${team.totalScore}</td>`;
+        
+        // 投擲履歴のセル
+        for(let i = 0; i < maxThrows; i++) {
+          let cellHtml = "";
+          if (team.throwHistory && i < team.throwHistory.length) {
+            const th = team.throwHistory[i];
+            if (th.isMiss) {
+              cellHtml = "X";
+            } else if (th.isSingle) {
+              // 1本のみ倒した場合は赤丸
+              cellHtml = `<span class="red-circle">${th.points}</span>`;
+            } else {
+              cellHtml = th.points;
+            }
+          }
+          tbody += `<td>${cellHtml}</td>`;
+        }
+
+        // 終了時（現在）の点数
+        const statusIcon = team.status === 'winner' ? ' 👑' : (team.status === 'disqualified' ? ' 💀' : '');
+        tbody += `<td style="font-weight:bold; font-size:16px;">${team.gameScore}${statusIcon}</td>
+        </tr>`;
+      });
+      tbody += `</tbody>`;
+
+      table.innerHTML = thead + tbody;
+    };
+
+    if (!window.location.search.includes('room=')) {
+      listenToFirebase();
+    }
   </script>
 </body>
 </html>
