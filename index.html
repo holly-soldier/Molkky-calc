@@ -27,7 +27,7 @@
     
     .current-turn-box { background: #007bff; color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
     .current-turn-box h2 { margin: 0 0 10px 0; font-size: 24px; }
-    .current-turn-box .stats { display: flex; justify-content: space-around; font-size: 18px; }
+    .current-turn-box .stats { display: flex; justify-content: space-around; align-items: center; font-size: 18px; }
     .action-buttons { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 10px; }
     .action-buttons button { flex: 1; margin: 0; padding: 15px; font-size: 18px; }
     
@@ -47,13 +47,12 @@
 
     hr { border: 0; height: 1px; background: #ccc; margin: 20px 0; }
 
-    /* スコアシート（テーブル）縦型レイアウト対応 */
+    /* スコアシート（テーブル） */
     .table-container { overflow-x: auto; margin-top: 15px; }
     .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .scoresheet-table th, .scoresheet-table td { border: 1px solid #555; padding: 8px; text-align: center; vertical-align: middle; }
     .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2; }
     .scoresheet-table tbody tr:nth-child(odd) { background-color: #ffffff; }
-    
     .red-circle { display: inline-flex; justify-content: center; align-items: center; width: 24px; height: 24px; border: 2px solid #e53935; border-radius: 50%; color: #000; font-weight: bold; }
 
     /* 印刷時の設定 */
@@ -122,7 +121,7 @@
       <div id="play-current-player" style="font-size: 18px; margin-bottom: 5px;">プレイヤー名</div>
       <div class="stats">
         <div>得点: <span id="play-current-score" style="font-weight: bold; font-size: 24px;">0</span></div>
-        <div>ミス: <span id="play-current-miss">0</span></div>
+        <div>ミス: <span id="play-current-miss" style="letter-spacing: 2px;">⚪⚪⚪</span></div>
       </div>
     </div>
 
@@ -420,7 +419,14 @@
         document.getElementById('play-current-player').style.display = 'none';
       }
       document.getElementById('play-current-score').innerText = currentTeam.gameScore;
-      document.getElementById('play-current-miss').innerText = currentTeam.misses;
+      
+      // ★修正：ミスを赤丸で表示（3つの中で何個赤丸にするか）
+      let missHtml = "";
+      for(let i = 0; i < 3; i++) {
+        if (i < currentTeam.misses) missHtml += "🔴";
+        else missHtml += "⚪";
+      }
+      document.getElementById('play-current-miss').innerHTML = missHtml;
 
       selectedPins = [];
       document.querySelectorAll('.pin').forEach(btn => btn.classList.remove('selected'));
@@ -687,11 +693,11 @@
         tbody += `</tr>`;
       }
 
-      // ★修正：終了時点数のステータスアイコンを「👑」のみに変更
+      // ★修正：上がりアイコンを改行せず「 👑」で表示
       tbody += `<tr style="border-top: 2px solid #333;"><td style="font-weight:bold; background-color:#e9ecef;">終了時点数</td>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
-        const statusIcon = team.status === 'winner' ? '<br>👑' : (team.status === 'disqualified' ? '<br>💀 失格' : '');
+        const statusIcon = team.status === 'winner' ? ' 👑' : (team.status === 'disqualified' ? '<br>💀 失格' : '');
         tbody += `<td style="font-weight:bold; font-size:18px; background-color:#e9ecef;">${team.gameScore}${statusIcon}</td>`;
       });
       tbody += `</tr>`;
