@@ -47,23 +47,26 @@
 
     hr { border: 0; height: 1px; background: #ccc; margin: 20px 0; }
 
-    /* スコアシート（テーブル） */
+    /* スコアシート（テーブル）縦型レイアウト対応 */
     .table-container { overflow-x: auto; margin-top: 15px; }
-    .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 600px; }
+    .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .scoresheet-table th, .scoresheet-table td { border: 1px solid #555; padding: 8px; text-align: center; vertical-align: middle; }
-    .scoresheet-table th { background-color: #e9ecef; }
+    /* 白と薄灰の交互塗りつぶし */
     .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2; }
     .scoresheet-table tbody tr:nth-child(odd) { background-color: #ffffff; }
-    .red-circle { display: inline-flex; justify-content: center; align-items: center; width: 22px; height: 22px; border: 2px solid #e53935; border-radius: 50%; color: #e53935; font-weight: bold; }
+    
+    /* ★修正：枠だけ赤、文字は黒 */
+    .red-circle { display: inline-flex; justify-content: center; align-items: center; width: 24px; height: 24px; border: 2px solid #e53935; border-radius: 50%; color: #000; font-weight: bold; }
 
     /* 印刷時の設定 */
     @media print {
       body { background-color: white; padding: 0; }
       .screen { box-shadow: none; max-width: 100%; padding: 0; margin: 0; }
       .no-print { display: none !important; }
-      .scoresheet-table { width: 100%; min-width: auto; font-size: 12pt; border: 2px solid #000; }
-      .scoresheet-table th, .scoresheet-table td { border: 1px solid #000; padding: 5px; }
-      .red-circle { border-color: red !important; color: red !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .scoresheet-table { width: 100%; font-size: 12pt; border: 2px solid #000; }
+      .scoresheet-table th, .scoresheet-table td { border: 1px solid #000; padding: 6px; }
+      /* 印刷時も黒文字と赤枠を維持 */
+      .red-circle { border-color: red !important; color: black !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .scoresheet-table tbody tr:nth-child(even) { background-color: #f2f2f2 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
   </style>
@@ -453,22 +456,18 @@
         `;
       });
       
-      // ★画面遷移の自動コントロール
       const activeScreen = document.querySelector('.active-screen').id;
       const winner = state.teams.find(t => t.status === 'winner');
 
       if (winner && activeScreen === 'screen-play') {
-        // 誰かが上がっていて、まだプレイ画面にいる場合はリザルトへ移動
         setTimeout(() => {
           document.getElementById('game-over-winner').innerText = `${winner.name} が50点に達しました！`;
           showScreen('screen-game-over');
         }, 500);
       } else if (!winner && activeScreen === 'screen-game-over') {
-        // 次のゲームに進んだ（または「戻る」ボタンが押された）ことで勝者がいなくなった場合、プレイ画面へ引き戻す
         showScreen('screen-play');
       }
 
-      // スコアシートが開いている場合はリアルタイム更新
       if (activeScreen === 'screen-scoresheet') {
         renderScoreSheet();
       }
@@ -543,7 +542,6 @@
         team.currentPlayerIdx = (team.currentPlayerIdx + 1) % team.players.length;
       }
 
-      // ★勝敗がついた場合でも、画面遷移は updatePlayUI() に任せるので同期するだけ
       if (team.status === 'winner') {
         syncToFirebase();
         return;
@@ -577,13 +575,11 @@
       }
     };
 
-    // ★リザルト画面から「間違えた！」と取り消すための関数
     window.undoScoreFromGameOver = function() {
       undoScore();
       showScreen('screen-play');
     };
 
-    // ★次のゲームへ進む関数
     window.proceedToNextGame = function() {
       state.gameNumber += 1;
       state.gameDate = new Date().toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -598,7 +594,6 @@
       });
       state.history = [];
       
-      // 同期する前に画面を順番設定画面に切り替える
       startOrderSelectionPhase();
       syncToFirebase();
     };
@@ -628,15 +623,15 @@
       showScreen('screen-scoresheet');
     };
 
-    // ★スコアシートから戻る際の処理
     window.hideScoreSheet = function() {
       if(state.teams.some(t => t.status === 'winner')) {
-        showScreen('screen-game-over'); // 勝負がついていればリザルト画面に戻す
+        showScreen('screen-game-over'); 
       } else {
-        showScreen('screen-play'); // プレイ中ならプレイ画面に戻す
+        showScreen('screen-play'); 
       }
     };
 
+    // ★修正：スコアシートを「縦型レイアウト（列=チーム、行=投擲）」に変更
     window.renderScoreSheet = function() {
       document.getElementById('sheet-title').innerText = `第 ${state.gameNumber || 1} ゲーム スコアシート`;
       document.getElementById('sheet-date').innerText = `日時: ${state.gameDate || ''}`;
@@ -651,46 +646,66 @@
         }
       });
 
+      // 1. ヘッダー行（項目とチーム名）
       let thead = `<thead><tr>
-        <th style="min-width:80px;">チーム名</th>
-        <th style="min-width:100px;">プレイヤー</th>
-        <th style="min-width:60px;">前G合計</th>`;
-      for(let i = 1; i <= maxThrows; i++) {
-        thead += `<th style="min-width:35px;">${i}</th>`;
-      }
-      thead += `<th style="min-width:70px;">終了時点数</th></tr></thead>`;
-      
+        <th style="min-width:60px; background-color:#e9ecef;">項目 \\ チーム</th>`;
+      state.teamOrder.forEach(tId => {
+        const team = state.teams.find(t => t.id === tId);
+        thead += `<th style="min-width:80px; background-color:#e9ecef;">${team.name}</th>`;
+      });
+      thead += `</tr></thead>`;
+
       let tbody = `<tbody>`;
+
+      // 2. プレイヤー行
+      tbody += `<tr><td style="font-weight:bold; background-color:#f9f9f9;">プレイヤー</td>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
         const playersHtml = (team.players && team.players.length > 0) ? team.players.join('<br>') : '<span style="color:#aaa;">(なし)</span>';
-        
-        tbody += `<tr>
-          <td style="font-weight:bold;">${team.name}</td>
-          <td style="font-size:12px;">${playersHtml}</td>
-          <td>${team.totalScore}</td>`;
-        
-        for(let i = 0; i < maxThrows; i++) {
+        tbody += `<td style="font-size:12px;">${playersHtml}</td>`;
+      });
+      tbody += `</tr>`;
+
+      // 3. 前G合計行
+      tbody += `<tr><td style="font-weight:bold; background-color:#f9f9f9;">前G合計</td>`;
+      state.teamOrder.forEach(tId => {
+        const team = state.teams.find(t => t.id === tId);
+        tbody += `<td>${team.totalScore}</td>`;
+      });
+      tbody += `</tr>`;
+
+      // 4. 各投擲行（縦に伸びていく）
+      for(let i = 0; i < maxThrows; i++) {
+        tbody += `<tr><td style="font-weight:bold; background-color:#f9f9f9;">${i + 1} 投目</td>`;
+        state.teamOrder.forEach(tId => {
+          const team = state.teams.find(t => t.id === tId);
           let cellHtml = "";
           if (team.throwHistory && i < team.throwHistory.length) {
             const th = team.throwHistory[i];
             if (th.isMiss) {
               cellHtml = "X";
             } else if (th.isSingle) {
+              // 赤丸クラスを適用（CSSで文字黒・枠赤に設定済み）
               cellHtml = `<span class="red-circle">${th.points}</span>`;
             } else {
               cellHtml = th.points;
             }
           }
           tbody += `<td>${cellHtml}</td>`;
-        }
+        });
+        tbody += `</tr>`;
+      }
 
-        const statusIcon = team.status === 'winner' ? ' 👑' : (team.status === 'disqualified' ? ' 💀' : '');
-        tbody += `<td style="font-weight:bold; font-size:16px;">${team.gameScore}${statusIcon}</td>
-        </tr>`;
+      // 5. 終了時点数行
+      tbody += `<tr style="border-top: 2px solid #333;"><td style="font-weight:bold; background-color:#e9ecef;">終了時点数</td>`;
+      state.teamOrder.forEach(tId => {
+        const team = state.teams.find(t => t.id === tId);
+        const statusIcon = team.status === 'winner' ? '<br>👑 上がり' : (team.status === 'disqualified' ? '<br>💀 失格' : '');
+        tbody += `<td style="font-weight:bold; font-size:18px; background-color:#e9ecef;">${team.gameScore}${statusIcon}</td>`;
       });
-      tbody += `</tbody>`;
+      tbody += `</tr>`;
 
+      tbody += `</tbody>`;
       table.innerHTML = thead + tbody;
     };
   </script>
