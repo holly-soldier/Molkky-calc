@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>モルック スコアボード</title>
+  
+  <link rel="icon" href="molkky.jpg">
+  <link rel="apple-touch-icon" href="molkky.jpg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <style>
     /* ベーススタイル */
@@ -420,7 +426,6 @@
       }
       document.getElementById('play-current-score').innerText = currentTeam.gameScore;
       
-      // ★修正：ミスを赤丸で表示（3つの中で何個赤丸にするか）
       let missHtml = "";
       for(let i = 0; i < 3; i++) {
         if (i < currentTeam.misses) missHtml += "🔴";
@@ -693,7 +698,6 @@
         tbody += `</tr>`;
       }
 
-      // ★修正：上がりアイコンを改行せず「 👑」で表示
       tbody += `<tr style="border-top: 2px solid #333;"><td style="font-weight:bold; background-color:#e9ecef;">終了時点数</td>`;
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
