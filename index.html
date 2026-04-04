@@ -9,8 +9,12 @@
   <link rel="apple-touch-icon" href="molkky.jpg">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  
+  <link rel="manifest" href="manifest.json">
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
   <style>
     body { font-family: sans-serif; text-align: center; margin: 0; padding: 5px; background-color: #f4f4f9; color: #333; }
     .screen { display: none; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 450px; margin: 0 auto; box-sizing: border-box; }
@@ -100,15 +104,14 @@
   </div>
 
   <div id="screen-name-confirm" class="screen no-print">
-    <h2>名前を設定しますか？</h2>
-    <p style="font-size: 14px; color: #555;">「いいえ」を選ぶと「チーム1」「チーム2」と自動設定され、プレイヤー名なしで開始します。</p>
-    <button class="btn-success" onclick="goToNameInput(true)" style="width: 100%;">はい（チーム名・プレイヤー名を入力）</button>
-    <button class="btn-secondary" onclick="goToNameInput(false)" style="width: 100%; margin-top: 10px;">いいえ（デフォルト設定で進む）</button>
+    <h2>名前・ハンデを設定しますか？</h2>
+    <p style="font-size: 14px; color: #555;">「いいえ」を選ぶと「チーム1」「チーム2」と自動設定され、標準ルールで開始します。</p>
+    <button class="btn-success" onclick="goToNameInput(true)" style="width: 100%;">はい（チーム名・ハンデを入力）</button>
+    <button class="btn-secondary" onclick="goToNameInput(false)" style="width: 100%; margin-top: 10px;">いいえ（標準設定で進む）</button>
   </div>
 
   <div id="screen-name-input" class="screen no-print">
-    <h2>名前の入力</h2>
-    <p style="font-size: 12px; color: #666;">※プレイヤー名は空欄でもOKです（最大4名）</p>
+    <h2>名前・ハンデの入力</h2>
     <div id="name-input-container" style="text-align: left; max-height: 60vh; overflow-y: auto;"></div>
     <button class="btn-success" style="width: 100%; margin-top: 15px;" onclick="finishNameInput()">順番の設定へ進む</button>
   </div>
@@ -116,6 +119,9 @@
   <div id="screen-order" class="screen no-print">
     <h2 id="order-title">投げる順番を選んでください</h2>
     <p id="order-desc" style="font-size: 14px; color: #555;">タップした順に番号が振られます。</p>
+    
+    <button class="btn-info" style="width: 100%; margin-bottom: 10px;" onclick="randomOrder()">🎲 ランダムに自動決定</button>
+    
     <div id="order-list" style="text-align: left;"></div>
     <button class="btn-warning" style="width: 100%; margin-top: 15px;" onclick="resetOrderSelection()">選び直す</button>
     <button class="btn-success" id="btn-order-next" style="width: 100%; margin-top: 10px; display: none;" onclick="confirmOrder()">決定して次へ</button>
@@ -207,7 +213,6 @@
     <button class="btn-danger" style="width: 100%; padding: 15px; font-size: 15px;" onclick="endGame()">🚪 全て終了してタイトルへ</button>
   </div>
 
-
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
     import { getDatabase, ref, set, onValue, get, remove } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
@@ -224,6 +229,30 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+
+    // ★追加：サービスワーカー（PWA）の登録
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+
+    // ★追加：効果音の準備（Web Audio API）
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    window.playWoodSound = function() {
+      if(audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle'; // モルックの木が当たる音を再現
+      osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+      gain.gain.setValueAtTime(1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.1);
+    };
 
     let state = {
       roomId: "",
@@ -243,10 +272,22 @@
       document.getElementById(id).classList.add('active-screen');
     }
 
+    // ★追加：タスクキルからの自動復帰機能
     window.onload = () => {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.has('room')) {
-        state.roomId = urlParams.get('room');
+      let roomIdToJoin = urlParams.get('room');
+      
+      if (!roomIdToJoin) {
+        roomIdToJoin = localStorage.getItem('molkkyRoomId');
+        if (roomIdToJoin) {
+          // URLにパラメータを付与してリロード（共有しやすくするため）
+          window.history.replaceState(null, '', '?room=' + roomIdToJoin);
+        }
+      }
+
+      if (roomIdToJoin) {
+        state.roomId = roomIdToJoin;
+        localStorage.setItem('molkkyRoomId', state.roomId);
         listenToFirebase();
         showScreen('screen-play');
       }
@@ -268,13 +309,14 @@
       state.teams = [];
       if (!wantInput) {
         for(let i=1; i<=state.teamCount; i++) {
-          state.teams.push(createTeamObj(`t${i}`, `チーム ${i}`, []));
+          state.teams.push(createTeamObj(`t${i}`, `チーム ${i}`, [], 0, false));
         }
         startOrderSelectionPhase();
       } else {
         const container = document.getElementById('name-input-container');
         container.innerHTML = '';
         for(let i=1; i<=state.teamCount; i++) {
+          // ★追加：ハンデ機能のUI
           let html = `<div style="background:#f8f9fa; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
                         <label style="font-weight:bold;">チーム ${i} の名前:</label>
                         <input type="text" id="tname-${i}" value="チーム ${i}">
@@ -283,6 +325,11 @@
                         <input type="text" id="pname-${i}-2" placeholder="プレイヤー 2">
                         <input type="text" id="pname-${i}-3" placeholder="プレイヤー 3">
                         <input type="text" id="pname-${i}-4" placeholder="プレイヤー 4">
+                        <div style="font-size:14px; margin-top:10px; padding-top:10px; border-top:1px dashed #ccc;">
+                          <b>ハンデ・特別ルール設定:</b><br>
+                          <label style="display:block; margin-top:5px;"><input type="checkbox" id="handicap-start-${i}"> 最初から10点持った状態でスタート</label>
+                          <label style="display:block; margin-top:5px;"><input type="checkbox" id="handicap-nodisq-${i}"> 3回連続ミスでの失格を無効にする</label>
+                        </div>
                       </div>`;
           container.innerHTML += html;
         }
@@ -290,8 +337,13 @@
       }
     };
 
-    function createTeamObj(id, name, players) {
-      return { id: id, name: name, players: players, gameScore: 0, totalScore: 0, misses: 0, status: 'playing', currentPlayerIdx: 0, throwHistory: [] };
+    // ★追加：初期ポイントと失格無効フラグを保持
+    function createTeamObj(id, name, players, startPoints, noDisq) {
+      return { 
+        id: id, name: name, players: players, 
+        gameScore: startPoints, startPoints: startPoints, noDisq: noDisq, 
+        totalScore: 0, misses: 0, status: 'playing', currentPlayerIdx: 0, throwHistory: [] 
+      };
     }
 
     window.finishNameInput = function() {
@@ -303,7 +355,10 @@
           const pName = document.getElementById(`pname-${i}-${j}`).value.trim();
           if(pName) players.push(pName);
         }
-        state.teams.push(createTeamObj(`t${i}`, tName, players));
+        const startPoints = document.getElementById(`handicap-start-${i}`).checked ? 10 : 0;
+        const noDisq = document.getElementById(`handicap-nodisq-${i}`).checked;
+        
+        state.teams.push(createTeamObj(`t${i}`, tName, players, startPoints, noDisq));
       }
       startOrderSelectionPhase();
     };
@@ -351,6 +406,14 @@
       }
     };
 
+    // ★追加：ランダムシャッフル機能
+    window.randomOrder = function() {
+      // リストをシャッフルして自動で選択済みにする
+      let shuffled = [...tempOrderList].sort(() => Math.random() - 0.5);
+      selectedOrder = shuffled.map(item => item.id);
+      confirmOrder();
+    };
+
     window.resetOrderSelection = function() {
       renderOrderScreen(document.getElementById('order-title').innerText, tempOrderList);
     };
@@ -384,6 +447,7 @@
       
       state.currentTurnIdx = 0;
       state.history = [];
+      localStorage.setItem('molkkyRoomId', state.roomId); // 部屋確定時に保存
       syncToFirebase();
       listenToFirebase();
       showScreen('screen-play');
@@ -406,11 +470,16 @@
           if(!state.history) state.history = [];
           if(!state.gameNumber) state.gameNumber = 1;
           if(!state.gameDate) state.gameDate = new Date().toLocaleString('ja-JP');
-          state.teams.forEach(t => { if(!t.throwHistory) t.throwHistory = []; });
+          state.teams.forEach(t => { 
+            if(!t.throwHistory) t.throwHistory = []; 
+            if(t.startPoints === undefined) t.startPoints = 0;
+            if(t.noDisq === undefined) t.noDisq = false;
+          });
           updatePlayUI();
         } else {
           alert("ルームが終了（解散）されました。タイトル画面に戻ります。");
           isListening = false;
+          localStorage.removeItem('molkkyRoomId'); // 自動復帰の解除
           window.location.href = window.location.href.split('?')[0];
         }
       });
@@ -518,6 +587,9 @@
     }
 
     window.submitScore = function() {
+      // ★追加：決定時に木がぶつかる効果音を鳴らす
+      playWoodSound();
+
       state.history.push(JSON.parse(JSON.stringify({
         teams: state.teams,
         currentTurnIdx: state.currentTurnIdx
@@ -540,7 +612,9 @@
 
       if (points === 0) {
         if (team.misses < 3) team.misses += 1; 
-        if (team.misses >= 3) {
+        
+        // ★追加：ハンデ（失格無効）がONの場合は失格処理を行わない
+        if (team.misses >= 3 && !team.noDisq) {
           team.gameScore = 0;
           team.status = 'disqualified';
         }
@@ -549,6 +623,8 @@
         team.gameScore += points;
         if (team.gameScore === 50) {
           team.status = 'winner';
+          // ★追加：ピッタリ50点で紙吹雪を舞わせる演出
+          confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         } else if (team.gameScore > 50) {
           team.gameScore = 25;
         }
@@ -569,7 +645,7 @@
         setTimeout(() => {
           alert("全員が失格となりました。\n点数と履歴をリセットして、このゲームを最初からやり直します。");
           state.teams.forEach(t => {
-            t.gameScore = 0;
+            t.gameScore = t.startPoints || 0; // ★修正：ハンデがあれば初期点に戻す
             t.misses = 0;
             t.status = 'playing';
             t.currentPlayerIdx = 0;
@@ -618,7 +694,8 @@
       
       state.teams.forEach(t => {
         t.totalScore += t.gameScore;
-        t.gameScore = 0;
+        // ★修正：ハンデ設定がある場合はその点数からリスタート
+        t.gameScore = t.startPoints || 0;
         t.misses = 0;
         t.status = 'playing';
         t.currentPlayerIdx = 0;
@@ -634,6 +711,7 @@
       if (confirm("全てのゲームを終了してタイトルに戻りますか？\n（このルームのデータは自動で完全に削除されます）")) {
         const roomRef = ref(db, `rooms/${state.roomId}`);
         remove(roomRef).then(() => {
+          localStorage.removeItem('molkkyRoomId');
           window.location.href = window.location.href.split('?')[0];
         });
       }
@@ -663,7 +741,6 @@
       }
     };
 
-    // ★修正：スコアシートのヘッダータイトルにM-SCOREを反映
     window.renderScoreSheet = function() {
       document.getElementById('sheet-title').innerText = `M-SCORE：第 ${state.gameNumber || 1} ゲーム`;
       document.getElementById('sheet-date').innerText = `日時: ${state.gameDate || ''}`;
