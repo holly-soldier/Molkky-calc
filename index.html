@@ -12,9 +12,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <style>
-    /* ベーススタイル */
-    body { font-family: sans-serif; text-align: center; margin: 0; padding: 10px; background-color: #f4f4f9; color: #333; }
-    .screen { display: none; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 450px; margin: 0 auto; box-sizing: border-box; }
+    /* ベーススタイル（余白を削ってコンパクトに） */
+    body { font-family: sans-serif; text-align: center; margin: 0; padding: 5px; background-color: #f4f4f9; color: #333; }
+    .screen { display: none; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 450px; margin: 0 auto; box-sizing: border-box; }
     .active-screen { display: block; }
     h1, h2, h3 { margin-top: 0; }
     button { padding: 12px; margin: 5px; font-size: 16px; border-radius: 6px; border: none; cursor: pointer; color: white; font-weight: bold; }
@@ -26,34 +26,41 @@
     .btn-info { background-color: #17a2b8; }
     input[type="text"] { padding: 10px; margin: 5px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
     
-    .molkky-layout { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 15px 0; }
-    .molkky-row { display: flex; gap: 8px; justify-content: center; }
-    .pin { width: 50px; height: 50px; border-radius: 50%; background-color: #e9ecef; color: #333; font-size: 20px; border: 2px solid #ccc; transition: all 0.2s; display: flex; justify-content: center; align-items: center; cursor: pointer; padding: 0;}
+    /* ピンのレイアウト（サイズと隙間を小さく） */
+    .molkky-layout { display: flex; flex-direction: column; align-items: center; gap: 5px; margin: 10px 0; }
+    .molkky-row { display: flex; gap: 5px; justify-content: center; }
+    .pin { width: 45px; height: 45px; border-radius: 50%; background-color: #e9ecef; color: #333; font-size: 18px; border: 2px solid #ccc; transition: all 0.2s; display: flex; justify-content: center; align-items: center; cursor: pointer; padding: 0;}
     .pin.selected { background-color: #28a745; color: white; border-color: #1e7e34; transform: scale(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
     
-    .current-turn-box { background: #007bff; color: white; padding: 15px; border-radius: 8px; margin-bottom: 15px; }
-    .current-turn-box h2 { margin: 0 0 10px 0; font-size: 24px; }
-    .current-turn-box .stats { display: flex; justify-content: space-around; align-items: center; font-size: 18px; }
-    .action-buttons { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 10px; }
-    .action-buttons button { flex: 1; margin: 0; padding: 15px; font-size: 18px; }
+    .current-turn-box { background: #007bff; color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+    .current-turn-box h2 { margin: 0 0 5px 0; font-size: 20px; }
+    .current-turn-box .stats { display: flex; justify-content: space-around; align-items: center; font-size: 16px; }
+    .action-buttons { display: flex; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
+    .action-buttons button { flex: 1; margin: 0; padding: 10px; font-size: 16px; }
     
-    .team-card { border: 2px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 8px; text-align: left; background: #fff; display: flex; justify-content: space-between; align-items: center; }
-    .team-card.active { border-color: #007bff; background: #e6f2ff; box-shadow: 0 0 10px rgba(0,123,255,0.3); }
+    /* チームごとのスコアボードを「2列」にしてコンパクト化 */
+    #play-scoreboard { display: grid; gap: 8px; margin-bottom: 10px; }
+    .score-grid-1 { grid-template-columns: 1fr; }
+    .score-grid-2 { grid-template-columns: 1fr 1fr; }
+
+    /* カードデザインの調整（縦方向に詰める） */
+    .team-card { border: 2px solid #ddd; padding: 8px; border-radius: 8px; text-align: left; background: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+    .team-card.active { border-color: #007bff; background: #e6f2ff; box-shadow: 0 0 8px rgba(0,123,255,0.3); }
     .team-card.winner { background-color: #fff3cd; border-color: #ffeeba; }
     .team-card.disqualified { background-color: #e9ecef; color: #6c757d; }
-    .team-info { flex: 1; }
-    .team-scores { text-align: right; }
-    .total-score { font-size: 12px; color: #666; }
-    .game-score { font-size: 22px; font-weight: bold; }
-    .miss-marks { color: red; font-size: 14px; }
+    .team-info { width: 100%; margin-bottom: 5px; }
+    .team-scores { width: 100%; text-align: right; }
+    .total-score { font-size: 11px; color: #666; }
+    .game-score { font-size: 20px; font-weight: bold; }
+    .miss-marks { color: red; font-size: 12px; }
 
     .order-list-item { padding: 15px; border: 1px solid #ccc; margin-bottom: 5px; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; background: #f9f9f9; }
     .order-list-item.selected { background: #d4edda; border-color: #28a745; }
     .order-badge { background: #28a745; color: white; border-radius: 50%; width: 24px; height: 24px; display: inline-flex; justify-content: center; align-items: center; font-size: 14px; font-weight: bold;}
 
-    hr { border: 0; height: 1px; background: #ccc; margin: 20px 0; }
+    hr { border: 0; height: 1px; background: #ccc; margin: 15px 0; }
 
-    /* スコアシート（テーブル） */
+    /* スコアシート（テーブル）縦型レイアウト対応 */
     .table-container { overflow-x: auto; margin-top: 15px; }
     .scoresheet-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .scoresheet-table th, .scoresheet-table td { border: 1px solid #555; padding: 8px; text-align: center; vertical-align: middle; }
@@ -124,14 +131,14 @@
     
     <div id="current-turn-display" class="current-turn-box">
       <h2 id="play-current-team">チーム名</h2>
-      <div id="play-current-player" style="font-size: 18px; margin-bottom: 5px;">プレイヤー名</div>
+      <div id="play-current-player" style="font-size: 16px; margin-bottom: 5px;">プレイヤー名</div>
       <div class="stats">
-        <div>得点: <span id="play-current-score" style="font-weight: bold; font-size: 24px;">0</span></div>
+        <div>得点: <span id="play-current-score" style="font-weight: bold; font-size: 22px;">0</span></div>
         <div>ミス: <span id="play-current-miss" style="letter-spacing: 2px;">⚪⚪⚪</span></div>
       </div>
     </div>
 
-    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 15px;">
+    <div style="background: #f8f9fa; padding: 10px; border-radius: 8px; margin-bottom: 10px;">
       <div style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">倒したピンをタップしてください</div>
       <div class="molkky-layout">
         <div class="molkky-row">
@@ -155,7 +162,7 @@
           <button class="pin" onclick="togglePin(2, this)">2</button>
         </div>
       </div>
-      <p id="calc-preview" style="font-weight: bold; color: #d32f2f; height: 20px; margin: 5px 0;">0本選択 (0点: ミス)</p>
+      <p id="calc-preview" style="font-weight: bold; color: #d32f2f; height: 18px; margin: 5px 0 0 0; font-size: 14px;">0本選択 (0点: ミス)</p>
     </div>
 
     <div class="action-buttons">
@@ -163,15 +170,20 @@
       <button class="btn-primary" onclick="submitScore()">右: 決定(反映)</button>
     </div>
 
-    <div id="play-scoreboard" style="margin-bottom: 20px;"></div>
+    <div id="play-scoreboard" class="score-grid-2">
+      </div>
 
-    <hr>
-    <button class="btn-info" style="width: 100%; margin-bottom: 10px;" onclick="showScoreSheet()">📋 スコアシートを表示 (印刷対応)</button>
-    <button class="btn-secondary" style="width: 100%; margin-bottom: 10px;" onclick="toggleQR()">📱 QRコードで共有</button>
-    <div id="qr-container" style="display: none; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 8px; margin-bottom: 10px;">
+    <hr style="margin: 10px 0;">
+    
+    <button class="btn-info" style="width: 100%; margin-bottom: 8px; padding: 10px; font-size: 14px;" onclick="showScoreSheet()">📋 スコアシートを表示 (印刷対応)</button>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn-secondary" style="flex: 1; margin: 0; padding: 10px; font-size: 14px;" onclick="toggleQR()">📱 QR共有</button>
+      <button class="btn-danger" style="flex: 1; margin: 0; padding: 10px; font-size: 14px;" onclick="endGame()">🚪 終了</button>
+    </div>
+
+    <div id="qr-container" style="display: none; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 8px; margin-top: 10px;">
       <canvas id="qr-code"></canvas>
     </div>
-    <button class="btn-danger" style="width: 100%;" onclick="endGame()">ゲーム終了 (全員タイトルへ戻る)</button>
   </div>
 
   <div id="screen-scoresheet" class="screen" style="max-width: 800px;">
@@ -196,10 +208,9 @@
     <button class="btn-success" style="width: 100%; margin-bottom: 15px; padding: 15px; font-size: 18px;" onclick="proceedToNextGame()">▶ 次のゲームへ進む</button>
     <button class="btn-info" style="width: 100%; margin-bottom: 15px; padding: 15px; font-size: 18px;" onclick="showScoreSheet()">📋 スコアシートを表示・印刷</button>
     
-    <button class="btn-warning" style="width: 100%; margin-bottom: 10px; padding: 15px; font-size: 16px;" onclick="undoScoreFromGameOver()">↩ 最後の入力を取り消す（プレイ画面へ戻る）</button>
-    
-    <hr>
-    <button class="btn-danger" style="width: 100%; padding: 15px;" onclick="endGame()">🚪 全てのゲームを終了する (タイトルへ戻る)</button>
+    <button class="btn-warning" style="width: 100%; margin-bottom: 10px; padding: 15px; font-size: 15px;" onclick="undoScoreFromGameOver()">↩ 直前の入力を取消して戻る</button>
+    <hr style="margin: 15px 0;">
+    <button class="btn-danger" style="width: 100%; padding: 15px; font-size: 15px;" onclick="endGame()">🚪 全て終了してタイトルへ</button>
   </div>
 
 
@@ -440,6 +451,9 @@
       const board = document.getElementById('play-scoreboard');
       board.innerHTML = '';
       
+      // ★ 1チームなら1列、複数チームなら2列のグリッドにする
+      board.className = state.teamOrder.length === 1 ? 'score-grid-1' : 'score-grid-2';
+
       state.teamOrder.forEach(tId => {
         const team = state.teams.find(t => t.id === tId);
         let cardClass = "team-card";
@@ -453,7 +467,7 @@
         board.innerHTML += `
           <div class="${cardClass}">
             <div class="team-info">
-              <div style="font-weight:bold; font-size:18px;">${team.name} <span style="font-size:14px;color:red;">${statusText}</span></div>
+              <div style="font-weight:bold; font-size:16px;">${team.name} <span style="font-size:12px;color:red;">${statusText}</span></div>
               <div class="total-score">これまでの合計: ${team.totalScore}点</div>
               <div class="miss-marks">${missMarks}</div>
             </div>
