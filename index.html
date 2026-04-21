@@ -216,6 +216,8 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
     import { getDatabase, ref, set, onValue, get, remove } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
+    // ★追加：Firebase Authentication（認証モジュール）
+    import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBx5CrIMOcya732cYe2YYpB01MHAUa0zqw",
@@ -229,21 +231,21 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
+    // ★追加：認証の初期化
+    const auth = getAuth(app);
 
-    // ★追加：サービスワーカー（PWA）の登録
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js');
       });
     }
 
-    // ★追加：効果音の準備（Web Audio API）
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     window.playWoodSound = function() {
       if(audioCtx.state === 'suspended') audioCtx.resume();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.type = 'triangle'; // モルックの木が当たる音を再現
+      osc.type = 'triangle';
       osc.frequency.setValueAtTime(400, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
       gain.gain.setValueAtTime(1, audioCtx.currentTime);
@@ -272,25 +274,30 @@
       document.getElementById(id).classList.add('active-screen');
     }
 
-    // ★追加：タスクキルからの自動復帰機能
+    // ★追加：ページ読み込み時に「匿名ログイン」を自動で行ってから画面を初期化する
     window.onload = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      let roomIdToJoin = urlParams.get('room');
-      
-      if (!roomIdToJoin) {
-        roomIdToJoin = localStorage.getItem('molkkyRoomId');
-        if (roomIdToJoin) {
-          // URLにパラメータを付与してリロード（共有しやすくするため）
-          window.history.replaceState(null, '', '?room=' + roomIdToJoin);
+      signInAnonymously(auth).then(() => {
+        // ログイン成功後にアプリを起動
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomIdToJoin = urlParams.get('room');
+        
+        if (!roomIdToJoin) {
+          roomIdToJoin = localStorage.getItem('molkkyRoomId');
+          if (roomIdToJoin) {
+            window.history.replaceState(null, '', '?room=' + roomIdToJoin);
+          }
         }
-      }
 
-      if (roomIdToJoin) {
-        state.roomId = roomIdToJoin;
-        localStorage.setItem('molkkyRoomId', state.roomId);
-        listenToFirebase();
-        showScreen('screen-play');
-      }
+        if (roomIdToJoin) {
+          state.roomId = roomIdToJoin;
+          localStorage.setItem('molkkyRoomId', state.roomId);
+          listenToFirebase();
+          showScreen('screen-play');
+        }
+      }).catch((error) => {
+        console.error("認証エラー:", error);
+        alert("データベースへの接続に失敗しました。リロードしてください。");
+      });
     };
 
     window.startSetup = function() {
@@ -316,7 +323,6 @@
         const container = document.getElementById('name-input-container');
         container.innerHTML = '';
         for(let i=1; i<=state.teamCount; i++) {
-          // ★追加：ハンデ機能のUI
           let html = `<div style="background:#f8f9fa; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
                         <label style="font-weight:bold;">チーム ${i} の名前:</label>
                         <input type="text" id="tname-${i}" value="チーム ${i}">
@@ -337,7 +343,6 @@
       }
     };
 
-    // ★追加：初期ポイントと失格無効フラグを保持
     function createTeamObj(id, name, players, startPoints, noDisq) {
       return { 
         id: id, name: name, players: players, 
@@ -406,9 +411,7 @@
       }
     };
 
-    // ★追加：ランダムシャッフル機能
     window.randomOrder = function() {
-      // リストをシャッフルして自動で選択済みにする
       let shuffled = [...tempOrderList].sort(() => Math.random() - 0.5);
       selectedOrder = shuffled.map(item => item.id);
       confirmOrder();
@@ -447,7 +450,7 @@
       
       state.currentTurnIdx = 0;
       state.history = [];
-      localStorage.setItem('molkkyRoomId', state.roomId); // 部屋確定時に保存
+      localStorage.setItem('molkkyRoomId', state.roomId); 
       syncToFirebase();
       listenToFirebase();
       showScreen('screen-play');
@@ -479,7 +482,7 @@
         } else {
           alert("ルームが終了（解散）されました。タイトル画面に戻ります。");
           isListening = false;
-          localStorage.removeItem('molkkyRoomId'); // 自動復帰の解除
+          localStorage.removeItem('molkkyRoomId'); 
           window.location.href = window.location.href.split('?')[0];
         }
       });
@@ -587,7 +590,6 @@
     }
 
     window.submitScore = function() {
-      // ★追加：決定時に木がぶつかる効果音を鳴らす
       playWoodSound();
 
       state.history.push(JSON.parse(JSON.stringify({
@@ -613,7 +615,6 @@
       if (points === 0) {
         if (team.misses < 3) team.misses += 1; 
         
-        // ★追加：ハンデ（失格無効）がONの場合は失格処理を行わない
         if (team.misses >= 3 && !team.noDisq) {
           team.gameScore = 0;
           team.status = 'disqualified';
@@ -623,7 +624,6 @@
         team.gameScore += points;
         if (team.gameScore === 50) {
           team.status = 'winner';
-          // ★追加：ピッタリ50点で紙吹雪を舞わせる演出
           confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         } else if (team.gameScore > 50) {
           team.gameScore = 25;
@@ -645,7 +645,7 @@
         setTimeout(() => {
           alert("全員が失格となりました。\n点数と履歴をリセットして、このゲームを最初からやり直します。");
           state.teams.forEach(t => {
-            t.gameScore = t.startPoints || 0; // ★修正：ハンデがあれば初期点に戻す
+            t.gameScore = t.startPoints || 0; 
             t.misses = 0;
             t.status = 'playing';
             t.currentPlayerIdx = 0;
@@ -694,7 +694,6 @@
       
       state.teams.forEach(t => {
         t.totalScore += t.gameScore;
-        // ★修正：ハンデ設定がある場合はその点数からリスタート
         t.gameScore = t.startPoints || 0;
         t.misses = 0;
         t.status = 'playing';
