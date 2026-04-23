@@ -1,4 +1,4 @@
-const CACHE_NAME = 'm-score-v3'; // ← アップデートのたびに更新
+const CACHE_NAME = 'm-score-v4'; // ← アップデートのたびに更新
 const urlsToCache = [
   './index.html',
   './molkky.jpg',
