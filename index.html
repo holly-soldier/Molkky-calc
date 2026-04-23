@@ -216,7 +216,6 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
     import { getDatabase, ref, set, onValue, get, remove } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-database.js";
-    // ★追加：Firebase Authentication（認証モジュール）
     import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -231,7 +230,6 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
-    // ★追加：認証の初期化
     const auth = getAuth(app);
 
     if ('serviceWorker' in navigator) {
@@ -274,10 +272,9 @@
       document.getElementById(id).classList.add('active-screen');
     }
 
-    // ★追加：ページ読み込み時に「匿名ログイン」を自動で行ってから画面を初期化する
     window.onload = () => {
+      // ★エラー検知：認証エラーが出たらアラートで教える
       signInAnonymously(auth).then(() => {
-        // ログイン成功後にアプリを起動
         const urlParams = new URLSearchParams(window.location.search);
         let roomIdToJoin = urlParams.get('room');
         
@@ -296,7 +293,7 @@
         }
       }).catch((error) => {
         console.error("認証エラー:", error);
-        alert("データベースへの接続に失敗しました。リロードしてください。");
+        alert("【設定エラー】\nFirebaseの「Authentication」で「匿名ログイン」が有効になっていません！\nFirebase側の設定を見直してください。");
       });
     };
 
@@ -456,9 +453,13 @@
       showScreen('screen-play');
     }
 
+    // ★エラー検知：クラウド保存時に弾かれたら警告を出す
     function syncToFirebase() {
       const roomRef = ref(db, `rooms/${state.roomId}`);
-      set(roomRef, state);
+      set(roomRef, state).catch((error) => {
+        console.error("保存エラー:", error);
+        alert("【エラー】クラウドへの保存に失敗しました。\nFirebaseの「Realtime Database」のルール設定が正しく書き換えられているか確認してください。");
+      });
     }
 
     function listenToFirebase() {
@@ -466,6 +467,8 @@
       isListening = true;
 
       const roomRef = ref(db, `rooms/${state.roomId}`);
+      
+      // ★エラー検知：読み込み権限がない場合も警告を出す
       onValue(roomRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
@@ -485,6 +488,9 @@
           localStorage.removeItem('molkkyRoomId'); 
           window.location.href = window.location.href.split('?')[0];
         }
+      }, (error) => {
+        console.error("読込エラー:", error);
+        alert("【エラー】データの読み込み権限がありません。\nFirebaseのルール設定を確認してください。");
       });
     }
 
