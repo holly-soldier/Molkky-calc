@@ -1,4 +1,4 @@
-const CACHE_NAME = 'm-score-v2'; // ← v1からv2に変更してキャッシュをリセット
+const CACHE_NAME = 'm-score-v3'; // ← アップデートのたびに更新
 const urlsToCache = [
   './index.html',
   './molkky.jpg',
